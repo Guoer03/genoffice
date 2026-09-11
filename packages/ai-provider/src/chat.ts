@@ -2,6 +2,7 @@ import { chatAnthropic } from './protocols/anthropic'
 import { chatGemini } from './protocols/gemini'
 import { chatOpenAiCompatible } from './protocols/openai-compatible'
 import { chatCodexAppServer } from './codex-app-server'
+import { chatClaudeCodeAppServer } from './claude-code-app-server'
 import { getProviderAdapter, type ResolvedEndpoint } from './registry'
 import type { AiChatResponse, AiProviderConfig, AiProviderId } from './types'
 import { AI_CHAT_RESPONSE_TIMEOUT_MS, createStreamWatchdog } from './watchdog'
@@ -31,6 +32,8 @@ export async function chatForProvider(
     switch (endpoint.protocol) {
       case 'codex-app-server':
         return chatCodexAppServer(config, system, user, wd.signal)
+      case 'claude-code-app-server':
+        return chatClaudeCodeAppServer(config, system, user, wd.signal)
       case 'anthropic':
         return chatAnthropic(wd, config, system, user, endpoint.baseUrl)
       case 'gemini':

@@ -402,6 +402,29 @@ const api: SlidesApi = {
     ipcRenderer.on('ai:stream-chunk', listener)
     return () => ipcRenderer.removeListener('ai:stream-chunk', listener)
   },
+  onClaudeCodeToolExec: (
+    handler: (payload: {
+      requestId: string
+      call: { id: string; name: string; input: Record<string, unknown> }
+    }) => void,
+  ) => {
+    const listener = (_e: IpcRendererEvent, payload: unknown) => {
+      if (typeof (payload as { requestId?: unknown }).requestId === 'string')
+        handler(
+          payload as {
+            requestId: string
+            call: { id: string; name: string; input: Record<string, unknown> }
+          },
+        )
+    }
+    ipcRenderer.on('ai:claude-code-tool-exec', listener)
+    return () => ipcRenderer.removeListener('ai:claude-code-tool-exec', listener)
+  },
+  sendClaudeCodeToolResult: (payload: {
+    requestId: string
+    callId: string
+    result: { output: string; isError?: boolean; mutated?: boolean; summary?: string }
+  }) => ipcRenderer.send('ai:claude-code-tool-result', payload),
   saveStyleSidecar: (data: { topic: string; styleSkill: string; createdAt: string }) =>
     ipcRenderer.invoke('ai:save-sidecar', data),
   saveStyleTemplate: (

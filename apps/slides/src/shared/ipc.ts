@@ -1639,6 +1639,20 @@ export interface SlidesApi {
   /** gsk availability: installed and logged in (for UI/tools to prompt login) */
   gskStatus: () => Promise<{ available: boolean; email?: string }>
   onAiStream: (handler: (chunk: AiStreamChunk) => void) => () => void
+  /// claude-code (ACP+MCP): agent tool calls arrive here for the renderer's
+  /// skill.executeTool (the main process bridges them over).
+  onClaudeCodeToolExec: (
+    handler: (payload: {
+      requestId: string
+      call: { id: string; name: string; input: Record<string, unknown> }
+    }) => void,
+  ) => () => void
+  /// claude-code: return a tool call's result to the main process's MCP server.
+  sendClaudeCodeToolResult: (payload: {
+    requestId: string
+    callId: string
+    result: { output: string; isError?: boolean; mutated?: boolean; summary?: string }
+  }) => void
   /** Style Skill sidecar: write styleSkill to a same-named .styleskill.json next to the draft */
   saveStyleSidecar: (data: {
     topic: string

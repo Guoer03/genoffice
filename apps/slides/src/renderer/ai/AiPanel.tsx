@@ -6,6 +6,7 @@ import {
   type AgentImage,
   type ToolDisplay,
 } from '@genoffice/agent-core'
+import { registerClaudeCodeToolExecHandler } from '@genoffice/ai-provider/claude-code-bridge'
 import type { RenderSlide } from '@genoffice/pptx-render'
 import { imageGenerationAvailable, mediaAnalysisAvailable } from '@genoffice/ai-provider/browser'
 import type { AiSettings, AttachmentAddResult, AttachmentMeta } from '../../shared/ipc'
@@ -1336,13 +1337,23 @@ export function AiPanel({
           .map((a) => a.name),
     }
     accessRef.current = access
+    const skill = composeSkills('slides+files', '', [
+      createSlidesSkill(access),
+      createFilesSkill(availableAttachments, (path) => readAttachmentPathsRef.current.add(path)),
+    ])
+    // claude-code (fat transport via ACP+MCP): bridge the agent's MCP tool calls
+    // to this skill's executeTool via the preload's two named channels.
+    registerClaudeCodeToolExecHandler(
+      {
+        on: (_channel, handler) => window.slidesApi.onClaudeCodeToolExec(handler),
+        send: (_channel, payload) => window.slidesApi.sendClaudeCodeToolResult(payload as any),
+      },
+      () => skill,
+    )
     loopRef.current = new AgentLoop({
       transport: createElectronTransport(() => settingsRef.current),
       systemSuffix: aiLangDirective,
-      skill: composeSkills('slides+files', '', [
-        createSlidesSkill(access),
-        createFilesSkill(availableAttachments, (path) => readAttachmentPathsRef.current.add(path)),
-      ]),
+      skill,
       events: {
         onText: (text) => {
           streamedTextRef.current = text

@@ -1,4 +1,4 @@
-import type { AgentToolCall } from '@genoffice/agent-core'
+import type { AgentToolCall, ToolExecution } from '@genoffice/agent-core'
 
 // ---- streaming (SSE line splitting shared by all providers) ----
 
@@ -42,6 +42,13 @@ export interface StreamCallbacks {
   onActivity?: () => void
   /** Stable renderer transport id for providers with native sessions. */
   sessionId?: string
+  /**
+   * Host-side tool execution bridge for fat-transport providers (claude-code via
+   * ACP+MCP): the agent calls a genoffice document tool over MCP; the app main
+   * bridges it to the renderer's skill.executeTool. Undefined for protocols
+   * where the host AgentLoop executes tools itself (anthropic/gemini/openai/codex).
+   */
+  executeTool?: (call: AgentToolCall) => Promise<ToolExecution>
   signal: AbortSignal
 }
 

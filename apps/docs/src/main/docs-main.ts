@@ -74,6 +74,8 @@ import {
   type LegacyAiSettings,
 } from '@genoffice/ai-provider'
 import { listCodexModels, shutdownCodexAppServers } from '@genoffice/ai-provider/codex-app-server'
+import { listClaudeCodeModels, shutdownClaudeCodeAppServers } from '@genoffice/ai-provider/claude-code-app-server'
+import { claudeCodeToolExecBridge } from '@genoffice/ai-provider/claude-code-bridge'
 import {
   ensureGenofficeLogin,
   gskApiKey,
@@ -2762,6 +2764,7 @@ const activeAiStreams = new Map<string, AbortController>()
  */
 export function registerAiIpc(): void {
   app.once('before-quit', shutdownCodexAppServers)
+  app.once('before-quit', shutdownClaudeCodeAppServers)
   ipcMain.handle('ai:get-settings', (): AiSettings => {
     const stored = readJson<Partial<AiSettings> & LegacyAiSettings>(SETTINGS_PATH(), {})
     // pre-lock legacy file: genspark selected with cloud tools opted out. The
@@ -2802,6 +2805,10 @@ export function registerAiIpc(): void {
     return listCodexModels(typeof cliPath === 'string' ? cliPath : undefined)
   })
 
+  ipcMain.handle('ai:claude-code-models', async (_event, cliPath: unknown) => {
+    return listClaudeCodeModels(typeof cliPath === 'string' ? cliPath : undefined)
+  })
+
   ipcMain.handle('ai:stream', async (event, request: AiStreamRequest) => {
     const { requestId, settings, system, messages } = request
     const tools = request.tools ?? []
@@ -2815,7 +2822,7 @@ export function registerAiIpc(): void {
     const send = (chunk: AiStreamChunk) => {
       if (!event.sender.isDestroyed()) event.sender.send('ai:stream-chunk', chunk)
     }
-    if (!config || (provider !== 'codex' && !config.apiKey)) {
+    if (!config || (provider !== 'codex' && provider !== 'claude-code' && !config.apiKey)) {
       send({
         requestId,
         type: 'error',
@@ -2823,7 +2830,7 @@ export function registerAiIpc(): void {
       })
       return
     }
-    if (provider !== 'codex' && !config.model) {
+    if (provider !== 'codex' && provider !== 'claude-code' && !config.model) {
       send({ requestId, type: 'error', error: tm('errNoModel') })
       return
     }
@@ -2849,6 +2856,24 @@ export function registerAiIpc(): void {
         onStopReason: (reason) => {
           stopReason = reason
         },
+        // claude-code (fat transport via ACP+MCP): bridge agent tool calls to the
+        // renderer's skill.executeTool. Conditional spread (not a ternary) keeps
+        // exactOptionalPropertyTypes happy and omits the field for other providers.
+        ...(provider === 'claude-code'
+          ? {
+              executeTool: claudeCodeToolExecBridge(
+                {
+                  send: (channel, payload) => event.sender.send(channel, payload),
+                  on: (channel, handler) => {
+                    const listener = (_e: unknown, payload: unknown) => handler(payload)
+                    ipcMain.on(channel, listener)
+                    return () => ipcMain.removeListener(channel, listener)
+                  },
+                },
+                requestId,
+              ),
+            }
+          : {}),
       })
       send({ requestId, type: 'done', stopReason })
     } catch (err) {
@@ -2967,13 +2992,13 @@ export function registerAiIpc(): void {
     if (provider === 'genspark' && config && !config.apiKey) {
       config = { ...config, apiKey: gskApiKey() }
     }
-    if (!config || (provider !== 'codex' && !config.apiKey)) {
+    if (!config || (provider !== 'codex' && provider !== 'claude-code' && !config.apiKey)) {
       return {
         ok: false,
         error: provider === 'genspark' ? tm('errGskNotLoggedIn') : tm('errNoApiKey', { provider }),
       }
     }
-    if (provider !== 'codex' && !config.model) return { ok: false, error: tm('errNoModel') }
+    if (provider !== 'codex' && provider !== 'claude-code' && !config.model) return { ok: false, error: tm('errNoModel') }
     try {
       const result = await chatForProvider(provider, config, system, user)
       // the one-shot path reports HTTP failures as ok:false with the raw body —

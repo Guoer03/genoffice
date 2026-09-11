@@ -107,6 +107,7 @@ import {
   composeSkills,
   type AgentImage,
 } from '@genoffice/agent-core'
+import { registerClaudeCodeToolExecHandler } from '@genoffice/ai-provider/claude-code-bridge'
 import { imageGenerationAvailable, type AiSettings } from '@genoffice/ai-provider/browser'
 import { type WorkbookOperation } from '../domain/workbook-dsl'
 import { columnLabel, parseAddress, rangeCellCount } from '../domain/cell-address'
@@ -1043,25 +1044,37 @@ export function App(): React.JSX.Element {
 
   const agentLoopRef = useRef<AgentLoop | null>(null)
   if (!agentLoopRef.current) {
+    const skill = composeSkills('sheets+files', '', [
+      createWorkbookSkill(sheetsSkillDeps()),
+      createFilesSkill(availableAttachments),
+      createMergeSkill({
+        getAttachments: availableAttachments,
+        mergePaths: (paths) => {
+          const runtime = univerRef.current
+          if (!runtime) throw new Error(t('appMergeWorkbooksFailed'))
+          return mergeAttachedWorkbooks({ runtime, lazyWorkbookRef, setMessage }, paths)
+        },
+      }),
+      createSearchSkill(),
+      createImageSkill(() =>
+        imageGenerationAvailable(aiSettingsRef.current, gskLoggedInRef.current),
+      ),
+    ])
+    // claude-code (fat transport via ACP+MCP): the agent calls genoffice document
+    // tools over MCP; bridge them to this skill's executeTool via the preload's
+    // two named channels. Cohesive — the bridge logic lives in claude-code-bridge.
+    registerClaudeCodeToolExecHandler(
+      {
+        on: (_channel, handler) => window.desktopApi.onClaudeCodeToolExec(handler),
+        send: (_channel, payload) =>
+          window.desktopApi.sendClaudeCodeToolResult(payload as any),
+      },
+      () => skill,
+    )
     agentLoopRef.current = new AgentLoop({
       transport: createElectronTransport(() => aiSettingsRef.current!),
       systemSuffix: aiLangDirective,
-      skill: composeSkills('sheets+files', '', [
-        createWorkbookSkill(sheetsSkillDeps()),
-        createFilesSkill(availableAttachments),
-        createMergeSkill({
-          getAttachments: availableAttachments,
-          mergePaths: (paths) => {
-            const runtime = univerRef.current
-            if (!runtime) throw new Error(t('appMergeWorkbooksFailed'))
-            return mergeAttachedWorkbooks({ runtime, lazyWorkbookRef, setMessage }, paths)
-          },
-        }),
-        createSearchSkill(),
-        createImageSkill(() =>
-          imageGenerationAvailable(aiSettingsRef.current, gskLoggedInRef.current),
-        ),
-      ]),
+      skill,
       events: {
         onText: (text) => {
           if (text) runLastTextRef.current = text
@@ -1226,8 +1239,14 @@ export function App(): React.JSX.Element {
     if (!config?.model) return false
     // Genspark's key never lands in the settings file; the main process injects
     // it from the gsk login state. When logged out, requests return an error
-    // guiding sign-in — not intercepted here.
-    return settings.provider === 'genspark' || !!config.apiKey
+    // guiding sign-in — not intercepted here. codex/claude-code reuse a local
+    // CLI login (no API key), so they are configured without a key too.
+    return (
+      settings.provider === 'genspark' ||
+      settings.provider === 'codex' ||
+      settings.provider === 'claude-code' ||
+      !!config.apiKey
+    )
   }
 
   /** Image attachments read as base64 and sent multimodal with this user message

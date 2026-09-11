@@ -73,6 +73,8 @@ import {
   type LegacyAiSettings,
 } from '@genoffice/ai-provider'
 import { shutdownCodexAppServers } from '@genoffice/ai-provider/codex-app-server'
+import { shutdownClaudeCodeAppServers } from '@genoffice/ai-provider/claude-code-app-server'
+import { claudeCodeToolExecBridge } from '@genoffice/ai-provider/claude-code-bridge'
 import { csvToXlsxBuffer, decodeCsvBuffer, sheetCsvToXlsxBuffer } from '../gateway/csv-import'
 import {
   ensureGenofficeLogin,
@@ -3068,6 +3070,7 @@ export function registerSheetsAiIpc(): void {
   if (aiIpcRegistered) return
   aiIpcRegistered = true
   app.once('before-quit', shutdownCodexAppServers)
+  app.once('before-quit', shutdownClaudeCodeAppServers)
 
   // Node fetch (undici) direct connections get reset under VPN/tun setups; retry over Chromium's stack
   setRescueFetch((url, init) => net.fetch(url, init))
@@ -3112,13 +3115,13 @@ export function registerSheetsAiIpc(): void {
     if (provider === 'genspark' && config && !config.apiKey) {
       config = { ...config, apiKey: gskApiKey() }
     }
-    if (!config || (provider !== 'codex' && !config.apiKey)) {
+    if (!config || (provider !== 'codex' && provider !== 'claude-code' && !config.apiKey)) {
       return {
         ok: false,
         error: provider === 'genspark' ? tm('errGskNotLoggedIn') : tm('errNoApiKey', { provider }),
       }
     }
-    if (provider !== 'codex' && !config.model) return { ok: false, error: tm('errNoModel') }
+    if (provider !== 'codex' && provider !== 'claude-code' && !config.model) return { ok: false, error: tm('errNoModel') }
     try {
       const result = await chatForProvider(provider, config, request.system, request.user)
       // the one-shot path reports HTTP failures as ok:false with the raw body —
@@ -3148,7 +3151,7 @@ export function registerSheetsAiIpc(): void {
     const send = (chunk: AiStreamChunk) => {
       if (!event.sender.isDestroyed()) event.sender.send(IPC_CHANNELS.aiStreamChunk, chunk)
     }
-    if (!config || (provider !== 'codex' && !config.apiKey)) {
+    if (!config || (provider !== 'codex' && provider !== 'claude-code' && !config.apiKey)) {
       send({
         requestId,
         type: 'error',
@@ -3156,7 +3159,7 @@ export function registerSheetsAiIpc(): void {
       })
       return
     }
-    if (provider !== 'codex' && !config.model) {
+    if (provider !== 'codex' && provider !== 'claude-code' && !config.model) {
       send({ requestId, type: 'error', error: tm('errNoModel') })
       return
     }
@@ -3182,6 +3185,24 @@ export function registerSheetsAiIpc(): void {
         onStopReason: (reason) => {
           stopReason = reason
         },
+        // claude-code (fat transport via ACP+MCP): bridge agent tool calls to the
+        // renderer's skill.executeTool. Conditional spread (not a ternary) keeps
+        // exactOptionalPropertyTypes happy and omits the field for other providers.
+        ...(provider === 'claude-code'
+          ? {
+              executeTool: claudeCodeToolExecBridge(
+                {
+                  send: (channel, payload) => event.sender.send(channel, payload),
+                  on: (channel, handler) => {
+                    const listener = (_e: unknown, payload: unknown) => handler(payload)
+                    ipcMain.on(channel, listener)
+                    return () => ipcMain.removeListener(channel, listener)
+                  },
+                },
+                requestId,
+              ),
+            }
+          : {}),
       })
       // sheets tsconfig sets exactOptionalPropertyTypes: an explicit
       // `stopReason: undefined` is not assignable to AiStreamChunk, so only

@@ -52,6 +52,18 @@ export const AI_PROVIDERS: AiProviderMeta[] = [
     needsCliPath: true,
   },
   {
+    id: 'claude-code',
+    label: 'Claude Code',
+    // Models come from the hardcoded Claude catalog; the local CLI login
+    // supplies the real default. cliPath points at the claude-agent-acp adapter
+    // (empty = auto-resolve from the package / PATH). No API key: the adapter
+    // reuses the ~/.claude subscription login.
+    models: [],
+    defaultModel: '',
+    keyPlaceholder: 'Not required - sign in to Claude',
+    needsCliPath: true,
+  },
+  {
     id: 'anthropic',
     label: 'Claude',
     // current-generation ids per platform.claude.com models overview (2026-08)

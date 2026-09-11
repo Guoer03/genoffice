@@ -534,6 +534,23 @@ const desktopApi: DesktopApi = {
     ipcRenderer.on(IPC_CHANNELS.aiStreamChunk, listener)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.aiStreamChunk, listener)
   },
+  onClaudeCodeToolExec(handler) {
+    const listener = (_event: unknown, payload: unknown): void => {
+      if (isRecord(payload) && typeof payload.requestId === 'string') {
+        handler(
+          payload as {
+            requestId: string
+            call: { id: string; name: string; input: Record<string, unknown> }
+          },
+        )
+      }
+    }
+    ipcRenderer.on('ai:claude-code-tool-exec', listener)
+    return () => ipcRenderer.removeListener('ai:claude-code-tool-exec', listener)
+  },
+  sendClaudeCodeToolResult(payload) {
+    ipcRenderer.send('ai:claude-code-tool-result', payload)
+  },
   async consumeNewBlankWorkbook() {
     const result: unknown = await ipcRenderer.invoke('sheets:consume-new-blank')
     return result === true

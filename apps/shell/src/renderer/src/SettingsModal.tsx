@@ -270,6 +270,21 @@ function AiModelPane({ t }: { t: TFunc }) {
     )
   }, [])
 
+  const refreshClaudeCodeModels = useCallback(async (cliPath = '', selectedModel = '') => {
+    if (!window.aiOffice.getClaudeCodeModels) return
+    const live = await window.aiOffice.getClaudeCodeModels(cliPath)
+    setCatalog((current) =>
+      current.map((entry) => {
+        if (entry.id !== 'claude-code') return entry
+        const models =
+          selectedModel && !live.models.includes(selectedModel)
+            ? [selectedModel, ...live.models]
+            : live.models
+        return { ...entry, models, defaultModel: live.defaultModel }
+      }),
+    )
+  }, [])
+
   useEffect(() => {
     let alive = true
     void window.aiOffice.getAiSettings?.().then((s) => {
@@ -287,11 +302,15 @@ function AiModelPane({ t }: { t: TFunc }) {
       if (codex) {
         void refreshCodexModels(codex.cliPath ?? '', codex.model).catch(() => undefined)
       }
+      const claudeCode = s.providers['claude-code']
+      if (claudeCode) {
+        void refreshClaudeCodeModels(claudeCode.cliPath ?? '', claudeCode.model).catch(() => undefined)
+      }
     })
     return () => {
       alive = false
     }
-  }, [refreshCodexModels])
+  }, [refreshCodexModels, refreshClaudeCodeModels])
 
   if (!settings) return null
   const provider = settings.provider
@@ -304,6 +323,7 @@ function AiModelPane({ t }: { t: TFunc }) {
   }
   const isGenspark = provider === 'genspark'
   const isCodex = provider === 'codex'
+  const isClaudeCode = provider === 'claude-code'
 
   const touch = () => {
     setDirty(true)
@@ -356,6 +376,9 @@ function AiModelPane({ t }: { t: TFunc }) {
         if (r?.ok && isCodex) {
           void refreshCodexModels(config.cliPath ?? '', config.model).catch(() => undefined)
         }
+        if (r?.ok && isClaudeCode) {
+          void refreshClaudeCodeModels(config.cliPath ?? '', config.model).catch(() => undefined)
+        }
       })
       .catch((error) =>
         setTestResult({ ok: false, error: error instanceof Error ? error.message : String(error) }),
@@ -388,7 +411,7 @@ function AiModelPane({ t }: { t: TFunc }) {
         />
       </div>
       <div className="set-field-desc set-ai-note">
-        {isGenspark ? t('setAiGensparkHint') : isCodex ? t('setAiCodexHint') : t('setAiByokNote')}
+        {isGenspark ? t('setAiGensparkHint') : isCodex || isClaudeCode ? t('setAiCodexHint') : t('setAiByokNote')}
       </div>
       <div className="set-field">
         <div className="set-field-text">
@@ -414,7 +437,7 @@ function AiModelPane({ t }: { t: TFunc }) {
           />
         )}
       </div>
-      {isCodex ? (
+      {isCodex || isClaudeCode ? (
         <div className="set-field">
           <div className="set-field-text">
             <div className="set-field-stack">
@@ -435,7 +458,9 @@ function AiModelPane({ t }: { t: TFunc }) {
             onChange={(e) => updateConfig({ cliPath: e.target.value.trim() })}
             onBlur={(e) => {
               const cliPath = e.target.value.trim()
-              void refreshCodexModels(cliPath, config.model).catch(() => undefined)
+              if (isClaudeCode)
+                void refreshClaudeCodeModels(cliPath, config.model).catch(() => undefined)
+              else void refreshCodexModels(cliPath, config.model).catch(() => undefined)
             }}
           />
         </div>

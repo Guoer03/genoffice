@@ -8,7 +8,9 @@
   "exports": {
     ".": "./src/index.ts",
     "./browser": "./src/browser.ts",
-    "./codex-app-server": "./src/codex-app-server.ts"
+    "./codex-app-server": "./src/codex-app-server.ts",
+    "./claude-code-app-server": "./src/claude-code-app-server.ts",
+    "./claude-code-bridge": "./src/claude-code-bridge.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -16,7 +18,9 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@genoffice/agent-core": "*"
+    "@genoffice/agent-core": "*",
+    "@zed-industries/claude-agent-acp": "^0.23.1",
+    "@modelcontextprotocol/sdk": "^1.30.0"
   },
   "devDependencies": {
     "typescript": "^5.9.3",

@@ -2835,6 +2835,20 @@ export interface DesktopApi {
   /// Downloads an image URL in the main process (SSRF-guarded); null on failure
   fetchImage(url: string): Promise<{ base64: string; mime: string } | null>
   onAiStream(handler: (chunk: AiStreamChunk) => void): () => void
+  /// claude-code (ACP+MCP): the agent's MCP tool calls arrive here for the
+  /// renderer's skill.executeTool to run (the main process bridges them over).
+  onClaudeCodeToolExec(
+    handler: (payload: {
+      requestId: string
+      call: { id: string; name: string; input: Record<string, unknown> }
+    }) => void,
+  ): () => void
+  /// claude-code: return a tool call's result to the main process's MCP server.
+  sendClaudeCodeToolResult(payload: {
+    requestId: string
+    callId: string
+    result: { output: string; isError?: boolean; mutated?: boolean; summary?: string }
+  }): void
   /// Chat attachments: multi-select file dialog (returns null on cancel)
   pickAttachments(): Promise<AttachmentAddResult | null>
   /// Validates dropped paths and returns attachment metadata

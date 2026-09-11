@@ -4,6 +4,7 @@ import { streamAnthropic } from './protocols/anthropic'
 import { streamGemini } from './protocols/gemini'
 import { streamOpenAiCompatible } from './protocols/openai-compatible'
 import { streamCodexAppServer } from './codex-app-server'
+import { streamClaudeCodeAppServer } from './claude-code-app-server'
 import type { StreamCallbacks } from './protocols/shared'
 import { getProviderAdapter, type AiProtocol } from './registry'
 import type { AiProviderConfig, AiProviderId } from './types'
@@ -29,7 +30,11 @@ export async function streamForProvider(
   if (endpoint.protocol === 'codex-app-server') {
     return streamCodexAppServer(config, system, messages, tools, maxTokens, cb)
   }
-  const protocol: Exclude<AiProtocol, 'codex-app-server'> = endpoint.protocol
+  if (endpoint.protocol === 'claude-code-app-server') {
+    return streamClaudeCodeAppServer(config, system, messages, tools, maxTokens, cb)
+  }
+  const protocol: Exclude<AiProtocol, 'codex-app-server' | 'claude-code-app-server'> =
+    endpoint.protocol
   return withOutputCapFallback(baseUrl, config.model, maxTokens, (cap) => {
     switch (protocol) {
       case 'anthropic':

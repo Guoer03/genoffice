@@ -3,6 +3,7 @@ import type { AgentMessage, AgentToolCall, AgentToolDef } from '@genoffice/agent
 export type AiProviderId =
   | 'genspark'
   | 'codex'
+  | 'claude-code'
   | 'anthropic'
   | 'gemini'
   | 'deepseek'

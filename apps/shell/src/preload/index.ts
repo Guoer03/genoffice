@@ -292,6 +292,9 @@ const homeApi: HomeApi = {
   async getCodexModels(cliPath) {
     return (await ipcRenderer.invoke('ai:codex-models', cliPath)) as CodexModelCatalog
   },
+  async getClaudeCodeModels(cliPath) {
+    return (await ipcRenderer.invoke('ai:claude-code-models', cliPath)) as CodexModelCatalog
+  },
   async testAiSettings(settings) {
     const result: unknown = await ipcRenderer.invoke('ai:chat', {
       settings,

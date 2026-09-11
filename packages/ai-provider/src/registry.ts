@@ -4,11 +4,11 @@ import { AI_PROVIDERS, GENSPARK_LLM_BASE_URLS } from './providers'
 import type { AiProviderConfig, AiProviderId, AiProviderMeta } from './types'
 
 /** Wire protocols every provider maps onto, including the official Codex app-server bridge. */
-export type AiProtocol = 'anthropic' | 'gemini' | 'openai-compatible' | 'codex-app-server'
+export type AiProtocol = 'anthropic' | 'gemini' | 'openai-compatible' | 'codex-app-server' | 'claude-code-app-server'
 
 export interface ProviderCapabilities {
   /** How the provider authenticates: app login, user key, or the Codex CLI's existing login. */
-  auth: 'gsk-login' | 'api-key' | 'codex-chatgpt'
+  auth: 'gsk-login' | 'api-key' | 'codex-chatgpt' | 'claude-subscription'
   /** chat models accept image input (declarative; for custom endpoints it is assumed, not known) */
   vision: boolean
 }
@@ -155,6 +155,13 @@ export const AI_PROVIDER_ADAPTERS: Record<AiProviderId, ProviderAdapter> = {
     capabilities: { auth: 'codex-chatgpt', vision: true },
     resolveEndpoint() {
       return { protocol: 'codex-app-server', baseUrl: '' }
+    },
+  },
+  'claude-code': {
+    meta: metaOf('claude-code'),
+    capabilities: { auth: 'claude-subscription', vision: true },
+    resolveEndpoint() {
+      return { protocol: 'claude-code-app-server', baseUrl: '' }
     },
   },
   anthropic: {

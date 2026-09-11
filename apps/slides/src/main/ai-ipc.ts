@@ -35,6 +35,8 @@ import {
   type LegacyAiSettings,
 } from '@genoffice/ai-provider'
 import { shutdownCodexAppServers } from '@genoffice/ai-provider/codex-app-server'
+import { shutdownClaudeCodeAppServers } from '@genoffice/ai-provider/claude-code-app-server'
+import { claudeCodeToolExecBridge } from '@genoffice/ai-provider/claude-code-bridge'
 import { fetchRemoteImage } from '@genoffice/electron-utils'
 import {
   webSearchTool,
@@ -103,6 +105,7 @@ function appendRunFailure(entry: AiRunFailure): void {
 
 export function registerAiIpc(): void {
   app.once('before-quit', shutdownCodexAppServers)
+  app.once('before-quit', shutdownClaudeCodeAppServers)
   // Node fetch (undici) direct connections get reset under VPN/tun setups; retry over Chromium's stack
   setRescueFetch((url, init) => net.fetch(url, init))
   setAiUserAgent(`GenOffice/${app.getVersion()}`)
@@ -151,7 +154,7 @@ export function registerAiIpc(): void {
     const send = (chunk: AiStreamChunk) => {
       if (!event.sender.isDestroyed()) event.sender.send('ai:stream-chunk', chunk)
     }
-    if (!config || (provider !== 'codex' && !config.apiKey)) {
+    if (!config || (provider !== 'codex' && provider !== 'claude-code' && !config.apiKey)) {
       send({
         requestId,
         type: 'error',
@@ -159,7 +162,7 @@ export function registerAiIpc(): void {
       })
       return
     }
-    if (provider !== 'codex' && !config.model) {
+    if (provider !== 'codex' && provider !== 'claude-code' && !config.model) {
       send({ requestId, type: 'error', error: tm('errNoModel') })
       return
     }
@@ -185,6 +188,24 @@ export function registerAiIpc(): void {
         onStopReason: (reason) => {
           stopReason = reason
         },
+        // claude-code (fat transport via ACP+MCP): bridge agent tool calls to the
+        // renderer's skill.executeTool. Conditional spread (not a ternary) keeps
+        // exactOptionalPropertyTypes happy and omits the field for other providers.
+        ...(provider === 'claude-code'
+          ? {
+              executeTool: claudeCodeToolExecBridge(
+                {
+                  send: (channel, payload) => event.sender.send(channel, payload),
+                  on: (channel, handler) => {
+                    const listener = (_e: unknown, payload: unknown) => handler(payload)
+                    ipcMain.on(channel, listener)
+                    return () => ipcMain.removeListener(channel, listener)
+                  },
+                },
+                requestId,
+              ),
+            }
+          : {}),
       })
       send(
         stopReason === undefined
