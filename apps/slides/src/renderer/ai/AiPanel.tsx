@@ -1034,11 +1034,12 @@ export function AiPanel({
         })
       },
       isCloudPageGenEnabled: async () => {
-        try {
-          return !!(await window.slidesApi.cloudGenStatus())?.enabled
-        } catch {
-          return false
-        }
+        // Force local page generation: generate_deck then uses generatePageLocal
+        // (the app's own AI transport writes a slide spec + pptx-engine builds it
+        // locally), so it no longer calls the Genspark cloud /slide_generate and
+        // needs no Genspark credits. Revert to the cloudGenStatus() check to
+        // re-enable Genspark cloud page generation when credits are available.
+        return false
       },
       // Local single-page generation (no gsk needed, e.g. BYOK): one LLM request through the
       // app's own AI transport writes a structured JSON slide spec, and the main process builds
