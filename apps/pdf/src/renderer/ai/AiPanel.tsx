@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent, ReactElement } from 'react'
 import { AgentLoop } from '@genoffice/agent-core'
+import { registerClaudeCodeToolExecHandler } from '@genoffice/ai-provider/claude-code-bridge'
 import { imageGenerationAvailable, type AiSettings } from '@genoffice/ai-provider/browser'
 import { AiComposer, AiScopeQuote, AiTypingIndicator, type AiScopeQuoteData } from '@genoffice/ui'
 import { aiLangDirective, t as tGlobal, useI18n } from '../i18n/locale'
@@ -377,9 +378,18 @@ export function AiPanel({
         imageGenerationAvailable(settingsRef.current, gskLoggedInRef.current),
       fetchImage: (url) => apiRef.current.fetchImage(url),
     }
+    const skill = createPdfSkill(deps)
+    registerClaudeCodeToolExecHandler(
+      {
+        on: (_channel, handler) => window.pdfApi.onClaudeCodeToolExec(handler),
+        send: (_channel, payload) =>
+          window.pdfApi.sendClaudeCodeToolResult(payload as any),
+      },
+      () => skill,
+    )
     loopRef.current = new AgentLoop({
       transport: createElectronTransport(() => settingsRef.current!),
-      skill: createPdfSkill(deps),
+      skill,
       systemSuffix: () => aiLangDirective(langRef.current),
       events: {
         onText: (text) => {

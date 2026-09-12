@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent, ReactElement, ReactNode } from 'react'
 import { AgentLoop, composeSkills } from '@genoffice/agent-core'
+import { registerClaudeCodeToolExecHandler } from '@genoffice/ai-provider/claude-code-bridge'
 import type { AgentImage } from '@genoffice/agent-core'
 import type { AiSettings } from '@genoffice/ai-provider'
 import { ATTACHMENT_IMAGE_EXTS } from '../../shared/ipc'
@@ -573,9 +574,7 @@ export function AiPanel({
 
   const loopRef = useRef<AgentLoop<DocSnapshot> | null>(null)
   if (!loopRef.current) {
-    loopRef.current = new AgentLoop<DocSnapshot>({
-      transport: transportRef.current,
-      skill: composeSkills('html+search', '', [
+    const skill = composeSkills('html+search', '', [
         createDocumentSkill({
           getText: () => depsRef.current.access.getText(),
           getVersion: () => depsRef.current.access.getVersion(),
@@ -605,7 +604,18 @@ export function AiPanel({
           () => intentRef.current,
           () => isDocEmpty(depsRef.current.access.getText()),
         ),
-      ]),
+      ])
+    registerClaudeCodeToolExecHandler(
+      {
+        on: (_channel, handler) => window.htmlApi.onClaudeCodeToolExec(handler),
+        send: (_channel, payload) =>
+          window.htmlApi.sendClaudeCodeToolResult(payload as any),
+      },
+      () => skill,
+    )
+    loopRef.current = new AgentLoop<DocSnapshot>({
+      transport: transportRef.current,
+      skill,
       captureSnapshot: () => depsRef.current.getSnapshot(),
       systemSuffix: () => aiLangDirective(langRef.current),
       events: {

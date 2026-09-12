@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent, ReactElement, ReactNode } from 'react'
 import { AgentLoop, composeSkills } from '@genoffice/agent-core'
+import { registerClaudeCodeToolExecHandler } from '@genoffice/ai-provider/claude-code-bridge'
 import { imageGenerationAvailable, type AiSettings } from '@genoffice/ai-provider/browser'
 import {
   AiComposer,
@@ -254,9 +255,7 @@ export function AiPanel({
   // The loop is built once; every mutable value goes through a ref getter
   const loopRef = useRef<AgentLoop<DocSnapshot> | null>(null)
   if (!loopRef.current) {
-    loopRef.current = new AgentLoop<DocSnapshot>({
-      transport: createElectronTransport(() => settingsRef.current!),
-      skill: composeSkills('markdown+search', '', [
+    const skill = composeSkills('markdown+search', '', [
         createMarkdownSkill(
           () => depsRef.current.getEditor(),
           {
@@ -266,7 +265,20 @@ export function AiPanel({
           () => imageGenerationAvailable(settingsRef.current, gskLoggedInRef.current),
         ),
         createSearchSkill(),
-      ]),
+      ])
+    // claude-code (fat transport via ACP+MCP): bridge the agent's MCP tool calls
+    // to this skill's executeTool via the preload's two named channels.
+    registerClaudeCodeToolExecHandler(
+      {
+        on: (_channel, handler) => window.markdownApi.onClaudeCodeToolExec(handler),
+        send: (_channel, payload) =>
+          window.markdownApi.sendClaudeCodeToolResult(payload as any),
+      },
+      () => skill,
+    )
+    loopRef.current = new AgentLoop<DocSnapshot>({
+      transport: createElectronTransport(() => settingsRef.current!),
+      skill,
       captureSnapshot: () => depsRef.current.getSnapshot(),
       systemSuffix: () => aiLangDirective(langRef.current),
       events: {

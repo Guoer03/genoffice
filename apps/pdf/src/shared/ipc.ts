@@ -771,4 +771,18 @@ export interface PdfApi {
   aiStream(request: AiStreamRequest): Promise<void>
   aiStreamCancel(requestId: string): Promise<void>
   onAiStream(handler: (chunk: AiStreamChunk) => void): () => void
+  /// claude-code (ACP+MCP): agent tool calls arrive here for the renderer's
+  /// skill.executeTool (the main process bridges them over).
+  onClaudeCodeToolExec(
+    handler: (payload: {
+      requestId: string
+      call: { id: string; name: string; input: Record<string, unknown> }
+    }) => void,
+  ): () => void
+  /// claude-code: return a tool call's result to the main process's MCP server.
+  sendClaudeCodeToolResult(payload: {
+    requestId: string
+    callId: string
+    result: { output: string; isError?: boolean; mutated?: boolean; summary?: string }
+  }): void
 }

@@ -97,6 +97,20 @@ const api: PdfApi = {
     ipcRenderer.on(AI_CHANNELS.streamChunk, listener)
     return () => ipcRenderer.removeListener(AI_CHANNELS.streamChunk, listener)
   },
+  onClaudeCodeToolExec: (handler) => {
+    const listener = (_e: Electron.IpcRendererEvent, payload: unknown) => {
+      if (typeof (payload as { requestId?: unknown })?.requestId === 'string')
+        handler(
+          payload as {
+            requestId: string
+            call: { id: string; name: string; input: Record<string, unknown> }
+          },
+        )
+    }
+    ipcRenderer.on('ai:claude-code-tool-exec', listener)
+    return () => ipcRenderer.removeListener('ai:claude-code-tool-exec', listener)
+  },
+  sendClaudeCodeToolResult: (payload) => ipcRenderer.send('ai:claude-code-tool-result', payload),
 }
 
 // Shared project chat store (registered app-wide by the shell's main init):

@@ -736,7 +736,11 @@ export async function streamClaudeCodeAppServer(
   maxTokens: number,
   cb: StreamCallbacks,
 ): Promise<void> {
-  const wd = createStreamWatchdog(cb.signal)
+  // Long idle budget (20 min): generate_deck is a multi-stage tool (style +
+  // outline + N pages, each an LLM call) that can run minutes with no ACP
+  // output while the host executes it — the default 180s idle watchdog would
+  // trip mid-deck. The onLine→onActivity tap keeps it alive during streaming.
+  const wd = createStreamWatchdog(cb.signal, 60_000, 1_200_000)
   return wd.guard(() =>
     runClaudeCodeAcp(config, system, messages, tools, maxTokens, {
       ...cb,
