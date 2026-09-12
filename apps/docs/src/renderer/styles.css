@@ -10579,20 +10579,7 @@ tr > .page-gap-cut {
   }
 }
 
-.ai-login-btn {
-  margin-top: 8px;
-  border: 1px solid var(--accent);
-  border-radius: 6px;
-  background: var(--accent);
-  padding: 4px 14px;
-  font-size: 13px;
-  color: var(--docs-on-accent);
-  cursor: pointer;
-}
 
-.ai-login-btn:hover {
-  opacity: 0.88;
-}
 
 /* ================= transient toast (save feedback) ================= */
 

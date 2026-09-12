@@ -16,9 +16,7 @@ export const hi = {
   aiQcPageFailed: 'पेज {n}: जाँच विफल ({error})',
   aiQcPageSkipped: 'पेज {n}: स्वचालित लेआउट जाँच छोड़ दी गई',
   aiQcStopped: 'लेआउट जाँच रोक दी गई',
-  aiQcCapped: 'शेष {count} पेज नहीं जाँचे गए (प्रति रन सीमा)',
-  aiGskLoginBtn: 'Genspark में साइन इन करें',
-  aiPanelTitle: 'Genspark',
+  aiQcCapped: 'शेष {count} पेज नहीं जाँचे गए (प्रति रन सीमा)',  aiPanelTitle: 'Genspark',
   aiOpenAssistant: 'AI सहायक खोलें',
   aiFactCheckBtn: 'AI तथ्य जाँच',
   aiFactCheckPrompt:

@@ -1,9 +1,8 @@
 /**
- * Search utilities (main process) — gsk (Genspark CLI) first, then Serper Google API,
- * then Tavily, with DuckDuckGo as the keyless last resort. Runs in the main process
- * (Node fetch / child process) to avoid renderer CORS; the Serper key reuses SERPER_API_KEY,
+ * Search utilities (main process) — Serper Google API first, then Tavily,
+ * with DuckDuckGo as the keyless last resort. Runs in the main process
+ * (Node fetch) to avoid renderer CORS; the Serper key reuses SERPER_API_KEY,
  * the Tavily key reuses TAVILY_API_KEY.
- * For gsk auth see ./gsk.ts (`gsk login` or GSK_API_KEY).
  */
 
 import {
@@ -13,11 +12,8 @@ import {
   type ImageSearchResult,
   type WebSearchResult,
 } from './shared'
-import { gskImageSearch, gskWebSearch, hasGskAuth } from './gsk'
 
 export type { ImageSearchResult, WebSearchResult } from './shared'
-export * from './gsk'
-export * from './genoffice-auth'
 export * from './media-tools'
 export * from './search-tools'
 
@@ -27,21 +23,18 @@ const TAVILY_KEY = () => process.env.TAVILY_API_KEY ?? ''
 /**
  * Backend selection for one search. Keys default to the SERPER_API_KEY /
  * TAVILY_API_KEY env vars; settings-driven callers (search-tools.ts) pass the
- * user's key and turn gsk off so the chosen backend runs first.
+ * user's key so the chosen backend runs first.
  */
 export interface SearchOptions {
-  /** false = skip the Genspark backend (cloud tools off, or a BYOK search provider is active) */
-  useGsk?: boolean
   serperKey?: string
   tavilyKey?: string
   /** which keyed backend to try first (default serper) */
   prefer?: 'serper' | 'tavily'
 }
 
-function normalizeOptions(opts: boolean | SearchOptions | undefined): Required<SearchOptions> {
-  const o = typeof opts === 'boolean' ? { useGsk: opts } : (opts ?? {})
+function normalizeOptions(opts: SearchOptions | undefined): Required<SearchOptions> {
+  const o = opts ?? {}
   return {
-    useGsk: o.useGsk ?? true,
     serperKey: o.serperKey ?? SERPER_KEY(),
     tavilyKey: o.tavilyKey ?? TAVILY_KEY(),
     prefer: o.prefer ?? 'serper',
@@ -136,19 +129,9 @@ async function tavilyWebSearch(
 export async function webSearch(
   query: string,
   maxResults = 6,
-  options: boolean | SearchOptions = true,
+  options: SearchOptions = {},
 ): Promise<WebSearchResponse> {
   const o = normalizeOptions(options)
-  // useGsk=false: the user turned Genspark cloud tools off or picked their own
-  // search key — skip straight to the keyed/free backends
-  if (o.useGsk && hasGskAuth()) {
-    try {
-      const r = await gskWebSearch(query, maxResults)
-      if (r.results.length) return { ...r, method: 'gsk' }
-    } catch {
-      /* fall back to Serper/Tavily/DuckDuckGo */
-    }
-  }
   const keyed =
     o.prefer === 'tavily'
       ? [
@@ -176,21 +159,13 @@ export async function webSearch(
 export async function imageSearch(
   query: string,
   maxResults = 8,
-  options: boolean | SearchOptions = true,
+  options: SearchOptions = {},
 ): Promise<{
   images: ImageSearchResult[]
   method: string
   error?: string
 }> {
   const o = normalizeOptions(options)
-  if (o.useGsk && hasGskAuth()) {
-    try {
-      const images = await gskImageSearch(query, maxResults)
-      if (images.length) return { images, method: 'gsk' }
-    } catch {
-      /* fall back to Serper/DuckDuckGo */
-    }
-  }
   // Tavily has no image endpoint; Serper is the only keyed image backend
   const key = o.serperKey
   if (key) {

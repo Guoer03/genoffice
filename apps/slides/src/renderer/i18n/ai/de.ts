@@ -17,9 +17,7 @@ export const de = {
   aiQcPageFailed: 'Seite {n}: Prüfung fehlgeschlagen ({error})',
   aiQcPageSkipped: 'Seite {n}: automatische Layoutprüfung übersprungen',
   aiQcStopped: 'Layoutprüfung gestoppt',
-  aiQcCapped: '{count} weitere Seite(n) nicht geprüft (Limit pro Lauf)',
-  aiGskLoginBtn: 'Bei Genspark anmelden',
-  aiPanelTitle: 'Genspark',
+  aiQcCapped: '{count} weitere Seite(n) nicht geprüft (Limit pro Lauf)',  aiPanelTitle: 'Genspark',
   aiOpenAssistant: 'KI-Assistenten öffnen',
   aiFactCheckBtn: 'KI-Faktencheck',
   aiFactCheckPrompt:

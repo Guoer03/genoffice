@@ -16,9 +16,7 @@ export const he = {
   aiQcPageFailed: 'עמוד {n}: הבדיקה נכשלה ({error})',
   aiQcPageSkipped: 'עמוד {n}: בדיקת הפריסה האוטומטית דולגה',
   aiQcStopped: 'בדיקת הפריסה הופסקה',
-  aiQcCapped: 'עוד {count} עמודים לא נבדקו (מגבלה לכל הרצה)',
-  aiGskLoginBtn: 'התחבר ל-Genspark',
-  aiPanelTitle: 'Genspark',
+  aiQcCapped: 'עוד {count} עמודים לא נבדקו (מגבלה לכל הרצה)',  aiPanelTitle: 'Genspark',
   aiOpenAssistant: 'פתיחת עוזר ה-AI',
   aiFactCheckBtn: 'בדיקת עובדות AI',
   aiFactCheckPrompt:

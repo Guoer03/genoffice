@@ -136,8 +136,7 @@ function creditsNoticeText(value: unknown): string | null {
   if (typeof value === 'string') {
     const t = value.toLowerCase()
     const credits =
-      t.includes('genspark.ai/pricing') ||
-      (t.includes('credit') && (t.includes('exhausted') || t.includes('insufficient')))
+      t.includes('credit') && (t.includes('exhausted') || t.includes('insufficient'))
     return credits ? value : null
   }
   if (Array.isArray(value) || (value && typeof value === 'object')) {

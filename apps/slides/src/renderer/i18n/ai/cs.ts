@@ -17,9 +17,7 @@ export const cs = {
   aiQcPageFailed: 'Stránka {n}: kontrola se nezdařila ({error})',
   aiQcPageSkipped: 'Stránka {n}: automatická kontrola rozložení přeskočena',
   aiQcStopped: 'Kontrola rozložení zastavena',
-  aiQcCapped: 'Dalších {count} stránek nebylo zkontrolováno (limit na jedno spuštění)',
-  aiGskLoginBtn: 'Přihlásit se ke Genspark',
-  aiPanelTitle: 'Genspark',
+  aiQcCapped: 'Dalších {count} stránek nebylo zkontrolováno (limit na jedno spuštění)',  aiPanelTitle: 'Genspark',
   aiOpenAssistant: 'Otevřít asistenta AI',
   aiFactCheckBtn: 'Ověření faktů AI',
   aiFactCheckPrompt:

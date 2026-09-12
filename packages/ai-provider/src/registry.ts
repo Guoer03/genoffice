@@ -1,14 +1,14 @@
 import { ANTHROPIC_BASE_URL } from './protocols/anthropic'
 import { GEMINI_BASE_URL } from './protocols/gemini'
-import { AI_PROVIDERS, GENSPARK_LLM_BASE_URLS } from './providers'
+import { AI_PROVIDERS } from './providers'
 import type { AiProviderConfig, AiProviderId, AiProviderMeta } from './types'
 
 /** Wire protocols every provider maps onto, including the official Codex app-server bridge. */
 export type AiProtocol = 'anthropic' | 'gemini' | 'openai-compatible' | 'codex-app-server' | 'claude-code-app-server'
 
 export interface ProviderCapabilities {
-  /** How the provider authenticates: app login, user key, or the Codex CLI's existing login. */
-  auth: 'gsk-login' | 'api-key' | 'codex-chatgpt' | 'claude-subscription'
+  /** How the provider authenticates: a user key, or the Codex / Claude Code CLI's existing login. */
+  auth: 'api-key' | 'codex-chatgpt' | 'claude-subscription'
   /** chat models accept image input (declarative; for custom endpoints it is assumed, not known) */
   vision: boolean
 }
@@ -133,23 +133,6 @@ function fixedEndpoint(
 }
 
 export const AI_PROVIDER_ADAPTERS: Record<AiProviderId, ProviderAdapter> = {
-  genspark: {
-    meta: metaOf('genspark'),
-    capabilities: { auth: 'gsk-login', vision: true },
-    // Route by model id prefix: claude uses the Anthropic protocol (preserves image
-    // input fidelity), the rest OpenAI-compatible. The proxy's gemini endpoint was
-    // removed server-side (405 as of 2026-08-31) along with its gemini models.
-    resolveEndpoint(config) {
-      if (config.model.startsWith('claude')) {
-        return { protocol: 'anthropic', baseUrl: GENSPARK_LLM_BASE_URLS.anthropic }
-      }
-      return {
-        protocol: 'openai-compatible',
-        baseUrl: GENSPARK_LLM_BASE_URLS.openai,
-        ...(modelHasFixedSampling(config.model) ? { omitTemperature: true } : {}),
-      }
-    },
-  },
   codex: {
     meta: metaOf('codex'),
     capabilities: { auth: 'codex-chatgpt', vision: true },

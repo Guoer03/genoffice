@@ -1,10 +1,9 @@
 /**
  * generate_image / analyze_media for the five editors' main processes: one
- * place that reads ai-settings.json live, routes to the BYOK media provider
- * when one is configured, and otherwise to the Genspark CLI behind the usual
- * login + cloud-tools gate. BYOK providers answer with bytes; those land in
- * the local generated-image store and come back as a file:// URL that the
- * insert pipelines' fetchRemoteImage accepts.
+ * place that reads ai-settings.json live and routes to the configured BYOK
+ * media provider. Providers answer with bytes; those land in the local
+ * generated-image store and come back as a file:// URL that the insert
+ * pipelines' fetchRemoteImage accepts.
  */
 
 import { existsSync, readFileSync, statSync } from 'node:fs'
@@ -12,7 +11,6 @@ import { basename, extname } from 'node:path'
 import {
   activeMediaConfig,
   analyzeMediaWithProvider,
-  cloudToolsEnabled,
   defaultAiSettings,
   generateImageWithProvider,
   resolveAiSettings,
@@ -26,17 +24,14 @@ import {
   readGeneratedImage,
   storeGeneratedImage,
 } from '@genoffice/electron-utils'
-import { gskAnalyzeMedia, gskGenerateImage, hasGskAuth, type GskGenerateImageOptions } from './gsk'
 
-export const GSK_NOT_LOGGED_IN_ERROR =
-  'Genspark account is not logged in on this machine; ask the user to log in first'
-export const GSK_TOOLS_OFF_ERROR =
-  'Genspark cloud tools are turned off in Settings (AI Model); enable them or configure an image provider under Settings (AI Media) to use this tool'
+export const MEDIA_PROVIDER_NOT_CONFIGURED_ERROR =
+  'No image/media provider is configured. Set one under Settings (AI Media) to use this tool.'
 
 /** 200 MB: enough for a long clip through the Gemini Files API, small enough to hold in memory */
 const MAX_MEDIA_BYTES = 200 * 1024 * 1024
 
-/** the only load failure that may hand the request back to Genspark; validation failures never do */
+/** size-related load failure; validation failures never read as this */
 export class MediaTooLargeError extends Error {}
 
 const MIME_BY_EXT: Record<string, string> = {
@@ -70,15 +65,6 @@ export function readAiSettingsFile(path: string): AiSettings {
   return resolveAiSettings(stored, defaultAiSettings())
 }
 
-type Gate = { error: string } | null
-
-/** the Genspark route's preconditions; null when it may proceed */
-function gskGate(settings: AiSettings, notLoggedInError: string): Gate {
-  if (!hasGskAuth()) return { error: notLoggedInError }
-  if (!cloudToolsEnabled(settings)) return { error: GSK_TOOLS_OFF_ERROR }
-  return null
-}
-
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
 }
@@ -86,8 +72,8 @@ function errorText(err: unknown): string {
 /**
  * Resolves a tool-supplied media reference to bytes: an https URL (SSRF-guarded),
  * a file:// URL from the generated-image store, or a local media file
- * (attachments). Only media extensions are read locally — the model must not be
- * able to ship arbitrary files to a vendor.
+ * (attachments). Only media extensions are read locally — the model must not
+ * be able to ship arbitrary files to a vendor.
  */
 export async function loadMediaReference(ref: string): Promise<MediaBlob> {
   if (/^https?:\/\//i.test(ref)) {
@@ -123,26 +109,29 @@ export async function loadMediaReference(ref: string): Promise<MediaBlob> {
 }
 
 export interface MediaToolOptions {
-  /** localized replacement for the default signed-out message */
-  notLoggedInError?: string
+  /** localized replacement for the default not-configured message */
+  notConfiguredError?: string
+}
+
+export interface GenerateImageOptions {
+  prompt: string
+  referenceImageUrls?: string[]
+  aspectRatio?: string
+  /** ignored by BYOK providers; kept for call-site compatibility */
+  model?: string
 }
 
 export async function generateImageTool(
   settingsPath: string,
-  op: GskGenerateImageOptions,
+  op: GenerateImageOptions,
   options: MediaToolOptions = {},
 ): Promise<{ url?: string; error?: string }> {
   const prompt = String(op.prompt ?? '').trim()
   if (!prompt) return { error: 'prompt must not be empty' }
   const settings = readAiSettingsFile(settingsPath)
   const byok = activeMediaConfig(settings, 'image')
+  if (!byok) return { error: options.notConfiguredError ?? MEDIA_PROVIDER_NOT_CONFIGURED_ERROR }
   try {
-    if (!byok) {
-      const gate = gskGate(settings, options.notLoggedInError ?? GSK_NOT_LOGGED_IN_ERROR)
-      if (gate) return gate
-      return { url: (await gskGenerateImage({ ...op, prompt })).url }
-    }
-    // `model` names Genspark-only special models (fal-*); BYOK uses the configured image model
     const references = await Promise.all((op.referenceImageUrls ?? []).map(loadMediaReference))
     const image = await generateImageWithProvider(byok.provider, byok.config, {
       prompt,
@@ -167,27 +156,21 @@ export async function analyzeMediaTool(
   const settings = readAiSettingsFile(settingsPath)
   const imageByok = activeMediaConfig(settings, 'analysis')
   const videoByok = activeMediaConfig(settings, 'video')
+  if (!imageByok && !videoByok) {
+    return { error: options.notConfiguredError ?? MEDIA_PROVIDER_NOT_CONFIGURED_ERROR }
+  }
   try {
-    const viaGsk = async () => {
-      const gate = gskGate(settings, options.notLoggedInError ?? GSK_NOT_LOGGED_IN_ERROR)
-      if (gate) return gate
-      return { text: await gskAnalyzeMedia({ mediaUrls, requirements }) }
-    }
-    if (!imageByok && !videoByok) return await viaGsk()
-    // route on the loaded bytes' real MIME, not the URL spelling: images go to the
-    // image-analysis provider, anything with video/audio to the video one
     let media: MediaBlob[]
     try {
       media = await Promise.all(mediaUrls.map(loadMediaReference))
     } catch (err) {
-      // only the size cap hands the request back to Genspark (the CLI streams large
-      // files itself); scheme / path / SSRF rejections stay rejections
-      if (err instanceof MediaTooLargeError && (!imageByok || !videoByok)) return await viaGsk()
       return { error: errorText(err) }
     }
+    // route on the loaded bytes' real MIME, not the URL spelling: images go to the
+    // image-analysis provider, anything with video/audio to the video one
     const hasVideo = media.some((m) => !m.mime.startsWith('image/'))
     const byok = hasVideo ? videoByok : imageByok
-    if (!byok) return await viaGsk()
+    if (!byok) return { error: options.notConfiguredError ?? MEDIA_PROVIDER_NOT_CONFIGURED_ERROR }
     return {
       text: await analyzeMediaWithProvider(byok.provider, byok.config, { media, requirements }),
     }

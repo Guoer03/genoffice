@@ -1,7 +1,6 @@
 import type { AgentMessage, AgentToolCall, AgentToolDef } from '@genoffice/agent-core'
 import { aiFetch } from '../fetch'
 import { httpBodyDetail } from '../http-error'
-import { gensparkAttributionHeaders } from '../providers'
 import type { AiChatResponse, AiProviderConfig } from '../types'
 import { createStreamWatchdog, type StreamWatchdog } from '../watchdog'
 import {
@@ -137,7 +136,6 @@ async function anthropicTurn(
         // which adds browser-semantics headers; Anthropic rejects those with 403 "Request not
         // allowed". This header is the official opt-in for browser/Electron environments.
         'anthropic-dangerous-direct-browser-access': 'true',
-        ...gensparkAttributionHeaders(baseUrl),
       },
       body: JSON.stringify({
         model: config.model,
@@ -266,7 +264,6 @@ export async function chatAnthropic(
       'anthropic-version': '2023-06-01',
       // Fetch in the Electron main process goes through Chromium's network stack; this header avoids 403.
       'anthropic-dangerous-direct-browser-access': 'true',
-      ...gensparkAttributionHeaders(baseUrl),
     },
     body: JSON.stringify({
       model: config.model,

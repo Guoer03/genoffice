@@ -16,9 +16,7 @@ export const ru = {
   aiQcPageFailed: 'Страница {n}: проверка не удалась ({error})',
   aiQcPageSkipped: 'Страница {n}: автоматическая проверка макета пропущена',
   aiQcStopped: 'Проверка макета остановлена',
-  aiQcCapped: 'Ещё {count} стр. не проверено (лимит за один запуск)',
-  aiGskLoginBtn: 'Войти в Genspark',
-  aiPanelTitle: 'Genspark',
+  aiQcCapped: 'Ещё {count} стр. не проверено (лимит за один запуск)',  aiPanelTitle: 'Genspark',
   aiOpenAssistant: 'Открыть ИИ-помощника',
   aiFactCheckBtn: 'ИИ-фактчекинг',
   aiFactCheckPrompt:

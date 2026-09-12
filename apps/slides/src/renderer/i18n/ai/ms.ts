@@ -16,9 +16,7 @@ export const ms = {
   aiQcPageFailed: 'Halaman {n}: semakan gagal ({error})',
   aiQcPageSkipped: 'Halaman {n}: semakan susun atur automatik dilangkau',
   aiQcStopped: 'Semakan susun atur dihentikan',
-  aiQcCapped: '{count} halaman lagi tidak disemak (had setiap larian)',
-  aiGskLoginBtn: 'Log masuk ke Genspark',
-  aiPanelTitle: 'Genspark',
+  aiQcCapped: '{count} halaman lagi tidak disemak (had setiap larian)',  aiPanelTitle: 'Genspark',
   aiOpenAssistant: 'Buka pembantu AI',
   aiFactCheckBtn: 'Semak Fakta AI',
   aiFactCheckPrompt:

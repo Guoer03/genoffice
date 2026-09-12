@@ -823,80 +823,6 @@ describe('streamForProvider: openai-compatible', () => {
   })
 })
 
-describe('streamForProvider: genspark', () => {
-  it('routes claude models to the Anthropic-compatible proxy endpoint', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(okResponse(sseStream([])))
-    vi.stubGlobal('fetch', fetchMock)
-    const { cb } = collector()
-    await streamForProvider(
-      'genspark',
-      { apiKey: 'gsk-k', model: 'claude-opus-4-7' },
-      'sys',
-      [],
-      [],
-      100,
-      cb,
-    ).catch(() => {})
-    expect(fetchMock).toHaveBeenCalledWith(
-      'https://www.genspark.ai/api/anthropic/v1/messages',
-      expect.objectContaining({ headers: expect.objectContaining({ 'x-api-key': 'gsk-k' }) }),
-    )
-  })
-
-  it('routes other models to the OpenAI-compatible proxy', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(okResponse(sseStream(['data: [DONE]'])))
-    vi.stubGlobal('fetch', fetchMock)
-    const { cb } = collector()
-    await streamForProvider(
-      'genspark',
-      { apiKey: 'gsk-k', model: 'gpt-5.2' },
-      'sys',
-      [],
-      [],
-      100,
-      cb,
-    ).catch(() => {})
-    expect(fetchMock).toHaveBeenCalledWith(
-      'https://www.genspark.ai/api/llm_proxy/v1/chat/completions',
-      expect.anything(),
-    )
-  })
-
-  it('stamps X-Agent-Type on both proxy routes for billing attribution', async () => {
-    for (const model of ['claude-opus-4-7', 'gpt-5.2']) {
-      const fetchMock = vi.fn().mockResolvedValue(okResponse(sseStream([])))
-      vi.stubGlobal('fetch', fetchMock)
-      const { cb } = collector()
-      await streamForProvider('genspark', { apiKey: 'gsk-k', model }, 'sys', [], [], 100, cb).catch(
-        () => {},
-      )
-      expect(fetchMock).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({
-          headers: expect.objectContaining({ 'X-Agent-Type': 'genoffice' }),
-        }),
-      )
-    }
-  })
-
-  it('never sends X-Agent-Type to direct vendor APIs', async () => {
-    for (const [provider, model] of [
-      ['anthropic', 'claude-opus-4-7'],
-      ['gemini', 'gemini-2.5-flash'],
-      ['openai', 'gpt-4.1-mini'],
-    ] as const) {
-      const fetchMock = vi.fn().mockResolvedValue(okResponse(sseStream([])))
-      vi.stubGlobal('fetch', fetchMock)
-      const { cb } = collector()
-      await streamForProvider(provider, { apiKey: 'k', model }, 'sys', [], [], 100, cb).catch(
-        () => {},
-      )
-      const headers = fetchMock.mock.calls[0]![1].headers as Record<string, string>
-      expect(headers['X-Agent-Type']).toBeUndefined()
-    }
-  })
-})
-
 describe('streamForProvider: 200 + non-stream JSON instead of SSE', () => {
   const creditsNotice =
     'Your Genspark credits have been exhausted. Please visit https://www.genspark.ai/pricing to purchase more credits.'
@@ -926,7 +852,7 @@ describe('streamForProvider: 200 + non-stream JSON instead of SSE', () => {
     expect(deltas).toEqual([])
   })
 
-  it('gemini route: zero usage + a pricing link counts as a credits notice', async () => {
+  it('gemini route: a credits-exhausted notice in the content becomes AiCreditsError', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
@@ -934,7 +860,7 @@ describe('streamForProvider: 200 + non-stream JSON instead of SSE', () => {
           candidates: [
             {
               content: {
-                parts: [{ text: 'Out of quota, visit https://www.genspark.ai/pricing to top up.' }],
+                parts: [{ text: 'Your credits are exhausted. Visit the billing page to top up.' }],
               },
             },
           ],
@@ -1048,7 +974,7 @@ describe('streamForProvider: interleaved-thinking reasoning', () => {
     const reasoning: string[] = []
     const { deltas, cb } = collector()
     await streamForProvider(
-      'genspark',
+      'openai',
       { apiKey: 'k', model: 'deep-seek-v4-flash' },
       'sys',
       toolLoopMessages,
@@ -1067,7 +993,7 @@ describe('streamForProvider: interleaved-thinking reasoning', () => {
     const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(reasoningTurn()))
     vi.stubGlobal('fetch', fetchMock)
     await streamForProvider(
-      'genspark',
+      'openai',
       { apiKey: 'k', model: 'gpt-5.6-luna' },
       'sys',
       toolLoopMessages,

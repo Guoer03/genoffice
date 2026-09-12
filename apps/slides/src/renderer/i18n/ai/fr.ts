@@ -16,9 +16,7 @@ export const fr = {
   aiQcPageFailed: 'Page {n} : échec de la vérification ({error})',
   aiQcPageSkipped: 'Page {n} : vérification automatique de la mise en page ignorée',
   aiQcStopped: 'Vérification de la mise en page arrêtée',
-  aiQcCapped: '{count} page(s) restante(s) non vérifiée(s) (limite par exécution)',
-  aiGskLoginBtn: 'Se connecter à Genspark',
-  aiPanelTitle: 'Genspark',
+  aiQcCapped: '{count} page(s) restante(s) non vérifiée(s) (limite par exécution)',  aiPanelTitle: 'Genspark',
   aiOpenAssistant: "Ouvrir l'assistant IA",
   aiFactCheckBtn: 'Vérification IA',
   aiFactCheckPrompt:

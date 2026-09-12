@@ -16,9 +16,7 @@ export const nl = {
   aiQcPageFailed: 'Pagina {n}: controle mislukt ({error})',
   aiQcPageSkipped: 'Pagina {n}: automatische lay-outcontrole overgeslagen',
   aiQcStopped: 'Lay-outcontrole gestopt',
-  aiQcCapped: 'Nog {count} pagina(’s) niet gecontroleerd (limiet per run)',
-  aiGskLoginBtn: 'Aanmelden bij Genspark',
-  aiPanelTitle: 'Genspark',
+  aiQcCapped: 'Nog {count} pagina(’s) niet gecontroleerd (limiet per run)',  aiPanelTitle: 'Genspark',
   aiOpenAssistant: 'AI-assistent openen',
   aiFactCheckBtn: 'AI-factcheck',
   aiFactCheckPrompt:

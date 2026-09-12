@@ -7,14 +7,14 @@ import {
 } from '../src/search-settings'
 
 describe('search settings', () => {
-  it('defaults to genspark with empty keys and rides along in defaultAiSettings', () => {
+  it('defaults to serper with empty keys and rides along in defaultAiSettings', () => {
     expect(defaultAiSearchSettings()).toEqual({
-      provider: 'genspark',
+      provider: 'serper',
       providers: { serper: { apiKey: '' }, tavily: { apiKey: '' } },
     })
-    expect(defaultAiSettings().search?.provider).toBe('genspark')
+    expect(defaultAiSettings().search?.provider).toBe('serper')
     const resolved = resolveAiSettings(
-      { provider: 'genspark', providers: {} as never },
+      { provider: 'claude-code', providers: {} as never },
       defaultAiSettings(),
     )
     expect(resolved.search).toEqual(defaultAiSearchSettings())
@@ -31,7 +31,7 @@ describe('search settings', () => {
   })
 
   it('activates a BYOK search provider only with a key', () => {
-    expect(activeSearchProvider({ search: undefined })).toBe('genspark')
+    expect(activeSearchProvider({ search: undefined })).toBe(null)
     expect(
       activeSearchProvider({
         search: {
@@ -39,7 +39,7 @@ describe('search settings', () => {
           providers: { serper: { apiKey: '' }, tavily: { apiKey: '' } },
         },
       }),
-    ).toBe('genspark')
+    ).toBe(null)
     expect(
       activeSearchProvider({
         search: {
@@ -48,8 +48,6 @@ describe('search settings', () => {
         },
       }),
     ).toBe('serper')
-    expect(activeSearchProvider({ search: { provider: 'bing', providers: {} } as never })).toBe(
-      'genspark',
-    )
+    expect(activeSearchProvider({ search: { provider: 'bing', providers: {} } as never })).toBe(null)
   })
 })

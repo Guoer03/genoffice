@@ -1,4 +1,4 @@
-/** Search result types and shared constants (used by both the index and gsk backends) */
+/** Search result types and shared constants for the index backend. */
 
 export interface WebSearchResult {
   title: string
@@ -32,24 +32,4 @@ export function safeHost(url: unknown): string {
  */
 export function asRecord(v: unknown): Record<string, unknown> {
   return typeof v === 'object' && v !== null ? (v as Record<string, unknown>) : {}
-}
-
-/** First element when the value is an array, otherwise undefined (loose JSON probing). */
-export function firstItem(v: unknown): unknown {
-  return Array.isArray(v) ? (v as unknown[])[0] : undefined
-}
-
-let explicitProxyUrl = ''
-
-/**
- * Proxy resolved by the apps' proxy bootstraps (env vars, else the system
- * proxy via session.resolveProxy); consumed by gskChildEnv() and the login
- * flow's proxy fallback.
- */
-export function setGskProxyUrl(url: string): void {
-  explicitProxyUrl = url
-}
-
-export function gskProxyUrl(): string {
-  return explicitProxyUrl
 }

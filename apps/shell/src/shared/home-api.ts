@@ -124,16 +124,6 @@ export interface HomeApi {
   getUpdateChannel(): Promise<UpdateChannel>
   /** switch + persist the update channel; triggers an immediate update check */
   setUpdateChannel(channel: UpdateChannel): Promise<void>
-  /** Genspark account status (gsk login state; to be upgraded to a signup/account system later) */
-  accountStatus(): Promise<AccountStatus>
-  /** start Genspark login (opens the browser; accountStatus flips to logged-in on completion); returns whether the launch succeeded */
-  accountLogin(): Promise<boolean>
-  /** progress events for the login started via accountLogin; returns an unsubscribe */
-  onAccountLogin(handler: (ev: AccountLoginEvent) => void): () => void
-  /** re-open the pending login auth URL in the default browser (rescue when auto-open failed) */
-  openLoginUrl(): Promise<void>
-  /** log out (clears the saved API key; the login state is shared globally with the gsk CLI) */
-  accountLogout(): Promise<void>
   /** app version (from package.json / electron app.getVersion) */
   getAppVersion(): Promise<string>
   /** whether the first-run onboarding has been completed or skipped (persisted in userData/app-settings.json) */
@@ -164,8 +154,6 @@ export interface HomeApi {
   onThemeChanged(handler: (theme: UiTheme) => void): () => void
   /** open the GenTeam community page in the default browser */
   openGenTeam(): Promise<void>
-  /** open the Genspark credit-usage page in the default browser */
-  openCreditUsage(): Promise<void>
   /** open the public GitHub repository in the default browser */
   openGitHubRepo(): Promise<void>
   /** current stargazer count of the public repo (null while offline / rate-limited) */
@@ -249,23 +237,6 @@ export interface CloudProjectsSnapshot {
   syncedAt: number
 }
 
-export interface AccountStatus {
-  /** gsk is installed and logged in */
-  loggedIn: boolean
-  email?: string
-  /** remaining Genspark credits (absent when the balance query failed) */
-  creditBalance?: number
-}
-
-/** login flow progress pushed from main (gsk login CLI output) */
-export interface AccountLoginEvent {
-  phase: 'launched' | 'url' | 'success' | 'error'
-  url?: string
-  expiresInSec?: number
-  /** 'network' | 'expired' | raw CLI error text */
-  error?: string
-}
-
 export interface RenameResult {
   ok: boolean
   /** the new absolute path when ok */
@@ -335,11 +306,6 @@ export const HOME_CHANNELS = {
   setLanguage: 'home:set-language',
   getUpdateChannel: 'home:get-update-channel',
   setUpdateChannel: 'home:set-update-channel',
-  accountStatus: 'home:account-status',
-  accountLogin: 'home:account-login',
-  accountLoginEvent: 'home:account-login-event',
-  accountLoginOpenUrl: 'home:account-login-open-url',
-  accountLogout: 'home:account-logout',
   getAppVersion: 'home:get-app-version',
   onboardingSeen: 'home:onboarding-seen',
   setOnboardingSeen: 'home:set-onboarding-seen',
@@ -354,7 +320,6 @@ export const HOME_CHANNELS = {
   getDefaultSaveDir: 'home:get-default-save-dir',
   pickDefaultSaveDir: 'home:pick-default-save-dir',
   openGenTeam: 'home:open-genteam',
-  openCreditUsage: 'home:open-credit-usage',
   openGitHubRepo: 'home:open-github-repo',
   githubStars: 'home:github-stars',
   starPromptShouldShow: 'home:star-prompt-should-show',

@@ -16,9 +16,7 @@ export const pt = {
   aiQcPageFailed: 'Página {n}: verificação falhou ({error})',
   aiQcPageSkipped: 'Página {n}: verificação automática de layout ignorada',
   aiQcStopped: 'Verificação de layout interrompida',
-  aiQcCapped: 'Mais {count} página(s) não verificada(s) (limite por execução)',
-  aiGskLoginBtn: 'Entrar no Genspark',
-  aiPanelTitle: 'Genspark',
+  aiQcCapped: 'Mais {count} página(s) não verificada(s) (limite por execução)',  aiPanelTitle: 'Genspark',
   aiOpenAssistant: 'Abrir assistente de IA',
   aiFactCheckBtn: 'Checagem IA',
   aiFactCheckPrompt:
