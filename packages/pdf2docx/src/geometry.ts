@@ -77,7 +77,7 @@ export function mergeIntervals(intervals: readonly Interval[], minGap = 0): Inte
   const out: Interval[] = []
   for (const iv of sorted) {
     const last = out[out.length - 1]
-    if (last && iv.lo - last.hi < minGap) last.hi = Math.max(last.hi, iv.hi)
+    if (last && iv.lo - last.hi <= minGap) last.hi = Math.max(last.hi, iv.hi)
     else out.push({ ...iv })
   }
   return out

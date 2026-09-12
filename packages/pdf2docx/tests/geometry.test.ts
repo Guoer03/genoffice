@@ -4,6 +4,7 @@ import {
   coverageRatio,
   intersectArea,
   median,
+  mergeIntervals,
   overlapRatio,
   rectUnion,
   verticalOverlapRatio,
@@ -38,6 +39,47 @@ describe('rect math', () => {
     const line = { x0: 0, y0: 0, x1: 100, y1: 10 }
     const sup = { x0: 50, y0: 6, x1: 55, y1: 14 } // 4 of its 8 units overlap
     expect(verticalOverlapRatio(sup, line)).toBeCloseTo(0.5)
+  })
+})
+
+describe('mergeIntervals', () => {
+  it('merges touching intervals with the default gap of 0', () => {
+    expect(
+      mergeIntervals([
+        { lo: 0, hi: 10 },
+        { lo: 10, hi: 20 },
+      ]),
+    ).toEqual([{ lo: 0, hi: 20 }])
+  })
+
+  it('merges overlapping intervals and honors minGap boundaries', () => {
+    expect(
+      mergeIntervals([
+        { lo: 0, hi: 10 },
+        { lo: 5, hi: 15 },
+      ]),
+    ).toEqual([{ lo: 0, hi: 15 }])
+    expect(
+      mergeIntervals(
+        [
+          { lo: 0, hi: 10 },
+          { lo: 12, hi: 20 },
+        ],
+        2,
+      ),
+    ).toEqual([{ lo: 0, hi: 20 }])
+    expect(
+      mergeIntervals(
+        [
+          { lo: 0, hi: 10 },
+          { lo: 13, hi: 20 },
+        ],
+        2,
+      ),
+    ).toEqual([
+      { lo: 0, hi: 10 },
+      { lo: 13, hi: 20 },
+    ])
   })
 })
 

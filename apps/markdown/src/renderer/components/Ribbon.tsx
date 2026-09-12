@@ -19,6 +19,7 @@ import {
   IconInlineCode,
   IconLink,
   IconNumbered,
+  IconOutlineView,
   IconPicture,
   IconProperties,
   IconRedo,
@@ -41,6 +42,9 @@ interface Props {
   onInsertImage: () => void
   frontmatterOpen: boolean
   onToggleFrontmatter: () => void
+  outlineOpen: boolean
+  onToggleOutline: () => void
+  hasOutline: boolean
   aiOpen: boolean
   onToggleAi: () => void
   onAiPreset: (instruction: string) => void
@@ -159,6 +163,9 @@ export function Ribbon({
   onInsertImage,
   frontmatterOpen,
   onToggleFrontmatter,
+  outlineOpen,
+  onToggleOutline,
+  hasOutline,
   aiOpen,
   onToggleAi,
   onAiPreset,
@@ -488,6 +495,14 @@ export function Ribbon({
               onClick={onToggleFrontmatter}
             >
               <IconProperties size={ICON} />
+            </IconBtn>
+            <IconBtn
+              title={t('outline')}
+              active={outlineOpen}
+              disabled={disabled || !hasOutline}
+              onClick={onToggleOutline}
+            >
+              <IconOutlineView size={ICON} />
             </IconBtn>
           </div>
         </div>

@@ -121,7 +121,7 @@ export async function parseProtection(zip: JSZip): Promise<DocProtection | null>
   const file = zip.file('word/settings.xml')
   if (!file) return null
   const xml = await file.async('string')
-  const tag = /<w:documentProtection[^>]*\/>/.exec(xml)?.[0]
+  const tag = /<w:documentProtection\b[^>]*?(?:\/>|>)/.exec(xml)?.[0]
   if (!tag) return null
   const edit = /w:edit="([^"]+)"/.exec(tag)?.[1]
   if (!edit || edit === 'none') return null
@@ -132,7 +132,7 @@ export async function parseProtection(zip: JSZip): Promise<DocProtection | null>
   const sid = /w:cryptAlgorithmSid="(\d+)"/.exec(tag)?.[1]
   return {
     edit,
-    enforced: enforcement === '1' || enforcement === 'true',
+    enforced: enforcement === '1' || enforcement === 'true' || enforcement === 'on',
     ...(hash ? { hash } : {}),
     ...(salt ? { salt } : {}),
     ...(spin ? { spinCount: parseInt(spin, 10) } : {}),
@@ -144,7 +144,7 @@ export async function parseProtection(zip: JSZip): Promise<DocProtection | null>
 export async function parseWriteProtection(zip: JSZip): Promise<WriteProtection | null> {
   const file = zip.file('word/settings.xml')
   if (!file) return null
-  const tag = /<w:writeProtection[^>]*\/>/.exec(await file.async('string'))?.[0]
+  const tag = /<w:writeProtection\b[^>]*?(?:\/>|>)/.exec(await file.async('string'))?.[0]
   if (!tag) return null
   const recommended = /w:recommended="(?:1|true|on)"/.test(tag)
   const hash = /w:hash="([^"]+)"/.exec(tag)?.[1]

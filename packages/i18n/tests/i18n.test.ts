@@ -56,10 +56,23 @@ describe('normalizeLang', () => {
 
   it('maps everything else (and missing) to en', () => {
     expect(normalizeLang('en-US')).toBe('en')
+    expect(normalizeLang('en_US')).toBe('en')
     expect(normalizeLang('sv-SE')).toBe('en')
     expect(normalizeLang('')).toBe('en')
     expect(normalizeLang(undefined)).toBe('en')
     expect(normalizeLang(null)).toBe('en')
+  })
+
+  it('requires a BCP-47 boundary after the language code', () => {
+    expect(normalizeLang('deleted')).toBe('en')
+    expect(normalizeLang('french')).toBe('en')
+    expect(normalizeLang('thread')).toBe('en')
+    expect(normalizeLang('italian')).toBe('en')
+    expect(normalizeLang('hebrew')).toBe('en')
+    expect(normalizeLang('de')).toBe('de')
+    expect(normalizeLang('de-DE')).toBe('de')
+    expect(normalizeLang('de_DE')).toBe('de')
+    expect(normalizeLang('es-419')).toBe('es')
   })
 })
 

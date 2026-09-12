@@ -44,7 +44,13 @@ export const hexTo255 = (hex: string): [number, number, number] => [
   parseInt(hex.slice(5, 7), 16),
 ]
 export const rgb255ToHex = (c: readonly [number, number, number]): string =>
-  `#${c.map((v) => v.toString(16).padStart(2, '0')).join('')}`
+  `#${c
+    .map((v) =>
+      Math.max(0, Math.min(255, Math.round(v)))
+        .toString(16)
+        .padStart(2, '0'),
+    )
+    .join('')}`
 
 /** Committed IPC style runs → encoded-key runs over newText (the draft/preview form) */
 export const styleRunsToKeyRuns = (

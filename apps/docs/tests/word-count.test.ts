@@ -29,4 +29,13 @@ describe('word count CJK rule', () => {
     expect(countWords('第1章：GenOffice 使用指南')).toBe(9)
     // 7 asian chars (incl. the fullwidth colon) + "1" and "GenOffice" as 2 words
   })
+
+  it('counts space-delimited non-Latin scripts as words', () => {
+    expect(nonAsianWordCount('Привет мир')).toBe(2)
+    expect(nonAsianWordCount('Γεια σου')).toBe(2)
+    expect(nonAsianWordCount('שלום עולם')).toBe(2)
+    expect(nonAsianWordCount('مرحبا بالعالم')).toBe(2)
+    expect(countWords('Привет мир')).toBe(2)
+    expect(countWords('Hello Привет')).toBe(2)
+  })
 })

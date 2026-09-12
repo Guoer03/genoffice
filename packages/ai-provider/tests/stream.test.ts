@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AgentToolCall } from '@genoffice/agent-core'
 import { AiCreditsError, sseLines, streamForProvider } from '../src/stream'
+import { jsonBodyInsteadOfSse } from '../src/protocols/shared'
 import { jsonResponse, okResponse, sseStream } from './test-utils'
 
 afterEach(() => {
@@ -1144,5 +1145,25 @@ describe('streamForProvider: a connection dropped mid tool arguments is not an e
       cb,
     )
     expect(toolCalls.map((c) => [c.name, c.input])).toEqual([['ping', { a: 1 }]])
+  })
+})
+
+describe('jsonBodyInsteadOfSse', () => {
+  it('detects JSON bodies regardless of Content-Type casing', async () => {
+    const payload = JSON.stringify({ choices: [] })
+    for (const contentType of [
+      'application/json',
+      'Application/JSON',
+      'APPLICATION/JSON; charset=utf-8',
+      'Application/Json; charset=utf-8',
+    ]) {
+      const res = new Response(payload, { status: 200, headers: { 'content-type': contentType } })
+      await expect(jsonBodyInsteadOfSse(res)).resolves.toBe(payload)
+    }
+    const sse = new Response('data: hi\n', {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream' },
+    })
+    await expect(jsonBodyInsteadOfSse(sse)).resolves.toBeNull()
   })
 })

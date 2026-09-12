@@ -3,6 +3,7 @@ import { useAutoSavePref } from '@genoffice/ui'
 import { EditorContent, useEditor } from '@tiptap/react'
 import { FindPanel, type FindFocusRequest, type FindPanelStrings } from '@genoffice/ui'
 import type { Editor } from '@tiptap/core'
+import { TextSelection } from '@tiptap/pm/state'
 import { useI18n } from './i18n/locale'
 import {
   buildFrontmatterRaw,
@@ -14,10 +15,12 @@ import {
 } from './markdown/docText'
 import { buildExtensions } from './editor/extensions'
 import { tiptapFindTarget } from './editor/findTarget'
+import { collectOutline, type OutlineItem } from './editor/outline'
 import { buildSlashItems } from './editor/slashCommand'
 import type { SlashController, SlashMenuState } from './editor/slashCommand'
 import { setImageBaseDir } from './editor/localImage'
 import { Ribbon } from './components/Ribbon'
+import { OutlinePane } from './components/OutlinePane'
 import { SlashMenu, type SlashMenuHandle } from './components/SlashMenu'
 import { ToastHost } from './components/toast'
 import { TableMenu } from './components/TableMenu'
@@ -134,6 +137,8 @@ export default function App() {
   const [autoSave, setAutoSave] = useAutoSavePref('mdapp.autoSave', window.markdownApi)
   const [showFind, setShowFind] = useState(false)
   const [findFocus, setFindFocus] = useState<FindFocusRequest>({ field: 'find', nonce: 0 })
+  const [outlineOpen, setOutlineOpen] = useState(false)
+  const [outlineItems, setOutlineItems] = useState<OutlineItem[]>([])
   const [zoom, setZoom] = useState(100)
 
   const statusRef = useRef<LoadStatus>('loading')
@@ -190,8 +195,9 @@ export default function App() {
     autofocus: true,
     editorProps: { attributes: { class: 'doc-editor' } },
     // uiOnly transactions (toggle fold state) never reach the file — not dirty
-    onUpdate: ({ transaction }) => {
+    onUpdate: ({ editor: updated, transaction }) => {
       if (!transaction.getMeta('uiOnly')) markDirty()
+      setOutlineItems(collectOutline(updated))
     },
   })
   editorRef.current = editor
@@ -546,6 +552,14 @@ export default function App() {
     current.view.dispatch(current.state.tr.setSelection(selection).scrollIntoView())
     current.view.focus()
   }, [])
+  /** outline click: move the cursor into the heading and scroll it into view */
+  const jumpToOutline = useCallback((pos: number): void => {
+    const current = editorRef.current
+    if (!current) return
+    const selection = TextSelection.near(current.state.doc.resolve(pos))
+    current.view.dispatch(current.state.tr.setSelection(selection).scrollIntoView())
+    current.view.focus()
+  }, [])
   const askSendNow = useCallback((text: string): void => {
     setAiOpen(true)
     setAiPreset((prev) => ({ text, nonce: (prev?.nonce ?? 0) + 1 }))
@@ -632,6 +646,9 @@ export default function App() {
         onInsertImage={insertImage}
         frontmatterOpen={fmOpen}
         onToggleFrontmatter={() => setFmOpen((v) => !v)}
+        outlineOpen={outlineOpen}
+        onToggleOutline={() => setOutlineOpen((v) => !v)}
+        hasOutline={outlineItems.length > 0}
         aiOpen={aiOpen}
         onToggleAi={() => setAiOpen((v) => !v)}
         onAiPreset={(text) => {
@@ -668,6 +685,7 @@ export default function App() {
             />
           )}
         </div>
+        {outlineOpen && <OutlinePane items={outlineItems} onJump={jumpToOutline} />}
         <div className="app-content">
           {showFind && findTarget && (
             <FindPanel

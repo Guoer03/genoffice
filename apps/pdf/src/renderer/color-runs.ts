@@ -48,7 +48,10 @@ export function decodeStyle(key: string): CharStyle {
   const out: CharStyle = {}
   if (color) out.color = color
   if (font) out.font = font
-  if (size) out.size = Number(size)
+  if (size) {
+    const n = Number(size)
+    if (Number.isFinite(n) && n > 0) out.size = n
+  }
   if (bold) out.bold = bold === '1'
   if (italic) out.italic = italic === '1'
   return out

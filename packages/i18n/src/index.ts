@@ -54,7 +54,8 @@ export function normalizeLang(raw: string | null | undefined): Lang {
   // traditional-script Chinese variants must win over the generic 'zh' prefix
   if (/^zh[-_](tw|hk|mo|hant)/.test(value)) return 'zh-TW'
   for (const lang of LANGS) {
-    if (lang !== 'en' && lang !== 'zh-TW' && value.startsWith(lang)) return lang
+    if (lang === 'en' || lang === 'zh-TW') continue
+    if (value === lang || value.startsWith(`${lang}-`) || value.startsWith(`${lang}_`)) return lang
   }
   // 'in' is the legacy ISO code for Indonesian still reported by some systems
   if (/^in\b/.test(value) || /^in[-_]/.test(value)) return 'id'

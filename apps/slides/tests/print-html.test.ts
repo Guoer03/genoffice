@@ -17,6 +17,11 @@ describe('parsePrintRange', () => {
     expect(parsePrintRange('4-2', 5)).toBeNull()
     expect(parsePrintRange('6', 5)).toBeNull()
   })
+
+  it('accepts spaces around dashes', () => {
+    expect(parsePrintRange('1 - 3', 5)).toEqual([0, 1, 2])
+    expect(parsePrintRange('1 – 3, 5', 5)).toEqual([0, 1, 2, 4])
+  })
 })
 
 describe('printPageCount', () => {

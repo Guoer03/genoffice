@@ -116,7 +116,7 @@ export function sseErrorText(error: unknown, fallback: string): string {
  */
 export async function jsonBodyInsteadOfSse(response: Response): Promise<string | null> {
   const contentType = response.headers.get('content-type') ?? ''
-  return contentType.includes('application/json') ? await response.text() : null
+  return contentType.toLowerCase().includes('application/json') ? await response.text() : null
 }
 
 /**

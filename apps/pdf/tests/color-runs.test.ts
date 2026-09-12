@@ -145,4 +145,12 @@ describe('style keys', () => {
     expect(out).toEqual(['', bold, bold, ''])
     expect(colorsToRuns(out)).toEqual([{ start: 1, end: 3, color: bold }])
   })
+
+  it('ignores non-numeric, non-finite, and non-positive sizes', () => {
+    expect(decodeStyle('x|y|oops||')).toEqual({ color: 'x', font: 'y' })
+    expect(decodeStyle('x|y|Infinity||')).toEqual({ color: 'x', font: 'y' })
+    expect(decodeStyle('x|y|0||')).toEqual({ color: 'x', font: 'y' })
+    expect(decodeStyle('x|y|-3||')).toEqual({ color: 'x', font: 'y' })
+    expect(decodeStyle('x|y|12.5||')).toEqual({ color: 'x', font: 'y', size: 12.5 })
+  })
 })

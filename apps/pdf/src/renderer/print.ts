@@ -8,12 +8,17 @@ const PRINT_SCALE = 150 / 72
  * system print dialog; clean up after it closes (including cancel).
  * Caller flushes unsaved changes and re-getDocument first — rotations/deleted pages are
  * already in the file.
+ * @param pages 1-based file pages to render; defaults to the whole document.
  */
-export async function printPdf(doc: PDFDocumentProxy): Promise<void> {
+export async function printPdf(doc: PDFDocumentProxy, pages?: number[]): Promise<void> {
   const root = document.createElement('div')
   root.className = 'pdf-print-root'
   const canvas = document.createElement('canvas')
-  for (let n = 1; n <= doc.numPages; n++) {
+  const targets =
+    pages && pages.length > 0
+      ? [...new Set(pages)].filter((n) => n >= 1 && n <= doc.numPages).sort((a, b) => a - b)
+      : Array.from({ length: doc.numPages }, (_x, i) => i + 1)
+  for (const n of targets) {
     const page = await doc.getPage(n)
     const viewport = page.getViewport({ scale: PRINT_SCALE })
     canvas.width = Math.floor(viewport.width)

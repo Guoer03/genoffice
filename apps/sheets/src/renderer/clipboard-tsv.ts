@@ -34,7 +34,7 @@ export function clipboardField(cell: ClipboardCell | null | undefined): string {
         (typeof cell.v === 'string' ? cell.v : extractPureTextFromCell(cell)))
   // Only normalize line endings: trailing newlines are significant cell
   // content and must survive (quoted) instead of being stripped.
-  const normalized = text.replace(/\r\n|\r+/g, '\n')
+  const normalized = text.replace(/\r\n|\r/g, '\n')
   return /[\t\n"]/.test(normalized) ? `"${normalized.replace(/"/g, '""')}"` : normalized
 }
 

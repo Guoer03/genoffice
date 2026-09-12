@@ -13,7 +13,10 @@
 const ASIAN_RE =
   /[ᄀ-ᇿ⺀-⿟、-〿぀-ヿ㄀-ㄯ㄰-㆏㇀-ㇿ㐀-䶿一-鿿가-힯豈-﫿！-｠￠-￦]|[\uD840-\uD87F][\uDC00-\uDFFF]/g
 
-const NON_ASIAN_WORD_RE = /[A-Za-z0-9À-ɏ]+(?:['-][A-Za-z0-9À-ɏ]+)*/g
+// Latin Extended Additional (Vietnamese, …) plus the space-delimited
+// non-Latin scripts Word counts as words: Greek, Cyrillic, Hebrew, Arabic.
+// Deliberately excludes the ASIAN_RE ranges above (counted char-by-char).
+const NON_ASIAN_WORD_RE = /[A-Za-z0-9À-ɏͰ-ϿЀ-ӿ֐-׿؀-ۿḀ-ỿ]+(?:['-][A-Za-z0-9À-ɏͰ-ϿЀ-ӿ֐-׿؀-ۿḀ-ỿ]+)*/g
 
 export function asianCharCount(text: string): number {
   return (text.match(ASIAN_RE) ?? []).length

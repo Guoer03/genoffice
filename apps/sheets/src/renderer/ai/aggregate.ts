@@ -52,7 +52,7 @@ export function createRangeAggregator(): RangeAggregator {
       max = max === null ? value : Math.max(max, value)
     }
     if (overflowed) return
-    const key = String(value)
+    const key = `${typeof value}:${String(value)}`
     const existing = counts.get(key)
     if (existing !== undefined) {
       counts.set(key, existing + count)
@@ -79,7 +79,7 @@ export function createRangeAggregator(): RangeAggregator {
         : [...counts.entries()]
             .sort((left, right) => right[1] - left[1])
             .slice(0, Math.max(0, topValueCount))
-            .map(([value, count]) => ({ value, count }))
+            .map(([key, count]) => ({ value: key.slice(key.indexOf(':') + 1), count }))
       return {
         cells,
         nonEmpty,

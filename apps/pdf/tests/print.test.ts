@@ -52,6 +52,25 @@ describe('printPdf', () => {
     expect(document.querySelector('.pdf-print-root')).toBeNull()
   })
 
+  it('renders only the requested pages, sorted, when given a subset', async () => {
+    const { doc, getPage, render } = fakeDoc(5)
+    let imgsAtPrintTime = 0
+    ;(window.print as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      imgsAtPrintTime = document.querySelectorAll('.pdf-print-root img').length
+      window.dispatchEvent(new Event('afterprint'))
+    })
+
+    await printPdf(doc, [4, 2, 99, 0])
+
+    // Out-of-range entries are dropped; the rest render in document order.
+    expect(getPage).toHaveBeenCalledTimes(2)
+    expect(getPage).toHaveBeenNthCalledWith(1, 2)
+    expect(getPage).toHaveBeenNthCalledWith(2, 4)
+    expect(render).toHaveBeenCalledTimes(2)
+    expect(imgsAtPrintTime).toBe(2)
+    expect(window.print).toHaveBeenCalledTimes(1)
+  })
+
   it('waits for afterprint before resolving', async () => {
     const { doc } = fakeDoc(1)
     let fireAfterPrint: () => void = () => {}

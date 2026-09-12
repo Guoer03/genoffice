@@ -27,6 +27,8 @@ function cleanState(): DocDirtyState {
     themeColorsDirty: false,
     commentsDirty: false,
     protectionDirty: false,
+    writeProtectionDirty: false,
+    removePersonalInfoDirty: false,
   }
 }
 
@@ -50,6 +52,8 @@ describe('isDocDirty', () => {
   it.each([
     ['commentsDirty', { commentsDirty: true }],
     ['protectionDirty', { protectionDirty: true }],
+    ['writeProtectionDirty', { writeProtectionDirty: true }],
+    ['removePersonalInfoDirty', { removePersonalInfoDirty: true }],
     ['sectionDirty', { sectionDirty: true }],
     ['headerDirty', { headerDirty: true }],
     ['footerDirty', { footerDirty: true }],

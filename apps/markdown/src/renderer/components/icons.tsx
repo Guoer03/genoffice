@@ -11,6 +11,7 @@ export {
   IconBullets,
   IconCaret,
   IconNumbered,
+  IconOutlineView,
   IconIndentDec,
   IconIndentInc,
   IconTable,

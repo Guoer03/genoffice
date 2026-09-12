@@ -103,7 +103,7 @@ describe('parseCsv', () => {
     // The "" escape keeps the field quoted: all five inner ; must not count,
     // or they outvote the two true commas and the columns mis-split.
     expect(sniffDelimiter('a,"; ""; ""; ""; """,d')).toBe(',')
-    expect(parseCsv('a,"; ""; ""; ""; """,d')).toEqual([['a', '; ""; ""; ""; ""', 'd']])
+    expect(parseCsv('a,"; ""; ""; ""; """,d')).toEqual([['a', '; "; "; "; "', 'd']])
   })
 
   it('drops the trailing empty row from a final newline', () => {

@@ -27,6 +27,8 @@ export interface DocDirtyState {
   themeColorsDirty: boolean
   commentsDirty: boolean
   protectionDirty: boolean
+  writeProtectionDirty: boolean
+  removePersonalInfoDirty: boolean
 }
 
 export function isDocDirty(s: DocDirtyState): boolean {
@@ -53,6 +55,8 @@ export function isDocDirty(s: DocDirtyState): boolean {
     s.themeFontsDirty ||
     s.themeColorsDirty ||
     s.commentsDirty ||
-    s.protectionDirty
+    s.protectionDirty ||
+    s.writeProtectionDirty ||
+    s.removePersonalInfoDirty
   )
 }

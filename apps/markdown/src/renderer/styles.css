@@ -2001,6 +2001,60 @@ html.genoffice-popover-open .ribbon-tabs {
   min-width: 0;
 }
 
+/* ---- document outline sidebar (PDF bookmark parity) ---- */
+
+.md-outline {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  width: 232px;
+  min-height: 0;
+  border-right: 1px solid var(--border);
+  padding: 8px 4px;
+  overflow-y: auto;
+}
+
+.md-outline-title {
+  padding: 2px 10px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.md-outline-empty {
+  padding: 2px 10px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.md-outline-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.md-outline-item {
+  display: block;
+  width: 100%;
+  border: none;
+  background: none;
+  text-align: left;
+  padding-top: 5px;
+  padding-bottom: 5px;
+  padding-right: 8px;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--text);
+  border-radius: 4px;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.md-outline-item:hover {
+  background: var(--hover);
+}
+
 /* ---- transient AI-change highlight ---- */
 
 .doc-editor .ai-changed {

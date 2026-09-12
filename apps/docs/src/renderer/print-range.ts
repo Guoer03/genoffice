@@ -5,8 +5,10 @@
  */
 export function parsePrintRange(text: string, max: number): number[] | null {
   const out = new Set<number>()
-  const parts = text.split(/[,，、;；\s]+/).filter(Boolean)
+  const tokenRe = /\d+\s*[-–]\s*\d+|\d+/g
+  const parts = text.match(tokenRe) ?? []
   if (parts.length === 0) return null
+  if (text.replace(tokenRe, '').replace(/[,，、;；\s]/g, '') !== '') return null
   for (const part of parts) {
     const m = /^(\d+)\s*[-–]\s*(\d+)$|^(\d+)$/.exec(part)
     if (!m) return null

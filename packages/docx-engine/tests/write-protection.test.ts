@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest'
 import JSZip from 'jszip'
 import { hashProtectionPassword, parseDocx, saveDocx, verifyProtectionPassword } from '../src/index'
+import { parseProtection, parseWriteProtection } from '../src/parse-package'
 import { buildDocx } from './helpers/build-docx'
 
 const XML_DECL = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
@@ -346,5 +347,33 @@ describe('removePersonalInformation', () => {
     })
     const reparsed = await parseDocx(cleared)
     expect(reparsed.removePersonalInfo).toBe(false)
+  })
+})
+
+describe('protection tag forms', () => {
+  const settingsZip = async (settingsInner: string): Promise<JSZip> => {
+    const zip = new JSZip()
+    zip.file(
+      'word/settings.xml',
+      `${XML_DECL}<w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">${settingsInner}</w:settings>`,
+    )
+    return zip
+  }
+
+  it('reads paired-form documentProtection tags', async () => {
+    const zip = await settingsZip(
+      '<w:documentProtection w:edit="readOnly" w:enforcement="1"></w:documentProtection>',
+    )
+    expect(await parseProtection(zip)).toMatchObject({ edit: 'readOnly', enforced: true })
+  })
+
+  it('treats enforcement="on" as enforced', async () => {
+    const zip = await settingsZip('<w:documentProtection w:edit="comments" w:enforcement="on"/>')
+    expect(await parseProtection(zip)).toMatchObject({ edit: 'comments', enforced: true })
+  })
+
+  it('reads paired-form writeProtection tags', async () => {
+    const zip = await settingsZip('<w:writeProtection w:recommended="1"></w:writeProtection>')
+    expect(await parseWriteProtection(zip)).toMatchObject({ recommended: true })
   })
 })
