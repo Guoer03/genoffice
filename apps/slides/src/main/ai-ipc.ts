@@ -45,7 +45,7 @@ import {
 } from '@genoffice/ai-search'
 import { addPicture, editPictureSrcRect, replacePictureBytes } from '@genoffice/pptx-engine'
 import { matchesElementRef } from '@genoffice/pptx-engine/identity'
-import { coverCropFractions } from '../shared/cover-crop'
+import { coverCropFractions } from '@genoffice/pipelines/slides'
 import type { AiRunFailure } from '../shared/ipc'
 import { EMU_PER_PX_96 } from '@genoffice/pptx-render'
 import { tm } from './i18n-main'
@@ -261,6 +261,7 @@ export function registerSlidesOnlyAiIpc(): void {
         referenceImageUrls?: string[]
         aspectRatio?: string
         imageSize?: string
+        transparentBackground?: boolean
       },
     ) => {
       return generateImageTool(
@@ -272,7 +273,7 @@ export function registerSlidesOnlyAiIpc(): void {
             ? op.referenceImageUrls.map(String)
             : undefined,
           aspectRatio: op.aspectRatio ? String(op.aspectRatio) : undefined,
-          imageSize: op.imageSize ? String(op.imageSize) : undefined,
+          transparentBackground: op.transparentBackground === true,
         },
       )
     },
@@ -291,6 +292,23 @@ export function registerSlidesOnlyAiIpc(): void {
     },
   )
 
+  /** Bytes of a user attachment the renderer resolved (attachment://): keep
+   *  pptx-native formats as-is, convert anything else (webp/bmp/…) to PNG. */
+  const attachmentImageBytes = (
+    base64: string,
+    ext: string,
+  ): { buf: Buffer; ext: string } | null => {
+    const buf = Buffer.from(String(base64), 'base64')
+    if (!buf.length) return null
+    const norm = String(ext)
+      .toLowerCase()
+      .replace(/^jpeg$/, 'jpg')
+    if (norm === 'png' || norm === 'gif' || norm === 'jpg') return { buf, ext: norm }
+    const img = nativeImage.createFromBuffer(buf)
+    if (img.isEmpty()) return null
+    return { buf: img.toPNG(), ext: 'png' }
+  }
+
   // Download an image from a URL and insert it into the given page (image search -> insert in one step; download in the main process avoids CORS)
   ipcMain.handle(
     'ai:insert-image-url',
@@ -298,7 +316,10 @@ export function registerSlidesOnlyAiIpc(): void {
       e,
       op: {
         slideIndex: number
-        url: string
+        url?: string
+        /** raw base64 of a user attachment (attachment:// reference) — no network fetch */
+        base64?: string
+        ext?: string
         xPx: number
         yPx: number
         wPx: number
@@ -311,15 +332,23 @@ export function registerSlidesOnlyAiIpc(): void {
       const slide = session.opened.deck.slides[op.slideIndex]
       if (!slide) return null
       try {
-        // the URL originates from AI tool calls (prompt-injectable via image
-        // search results), so refuse non-http schemes and private/link-local
-        // targets; redirects are followed manually so every hop is validated.
-        // fetchRemoteImage adds CDN-friendly headers and transient-error retries.
-        const resp = await fetchRemoteImage(String(op.url))
-        if (!resp || !resp.ok) return null
-        const buf = Buffer.from(await resp.arrayBuffer())
-        const ct = resp.headers.get('content-type') ?? ''
-        const ext = ct.includes('png') ? 'png' : ct.includes('gif') ? 'gif' : 'jpg'
+        let buf: Buffer
+        let ext: string
+        if (op.base64 != null) {
+          const decoded = attachmentImageBytes(op.base64, op.ext ?? '')
+          if (!decoded) return null
+          ;({ buf, ext } = decoded)
+        } else {
+          // the URL originates from AI tool calls (prompt-injectable via image
+          // search results), so refuse non-http schemes and private/link-local
+          // targets; redirects are followed manually so every hop is validated.
+          // fetchRemoteImage adds CDN-friendly headers and transient-error retries.
+          const resp = await fetchRemoteImage(String(op.url))
+          if (!resp || !resp.ok) return null
+          buf = Buffer.from(await resp.arrayBuffer())
+          const ct = resp.headers.get('content-type') ?? ''
+          ext = ct.includes('png') ? 'png' : ct.includes('gif') ? 'gif' : 'jpg'
+        }
         const baseWidthPx = session.opened.deck.size.cx / EMU_PER_PX_96
         const scale = op.fitWidthPx / baseWidthPx
         const toEmu = (px: number) => Math.round((px / scale) * EMU_PER_PX_96)
@@ -358,7 +387,18 @@ export function registerSlidesOnlyAiIpc(): void {
   // (frame/z-order/effects survive). Same URL hardening as ai:insert-image-url.
   ipcMain.handle(
     'ai:replace-picture-url',
-    async (e, op: { slideIndex: number; sourceId: string; url: string; keepSrcRect?: boolean }) => {
+    async (
+      e,
+      op: {
+        slideIndex: number
+        sourceId: string
+        url?: string
+        /** raw base64 of a user attachment (attachment:// reference) — no network fetch */
+        base64?: string
+        ext?: string
+        keepSrcRect?: boolean
+      },
+    ) => {
       const session = sessions.get(e.sender.id)
       if (!session) return null
       const slide = session.opened.deck.slides[op.slideIndex]
@@ -369,11 +409,19 @@ export function registerSlidesOnlyAiIpc(): void {
         slide.elements.find((el) => matchesElementRef(el, String(op.sourceId)))?.id ??
         String(op.sourceId)
       try {
-        const resp = await fetchRemoteImage(String(op.url))
-        if (!resp || !resp.ok) return null
-        const buf = Buffer.from(await resp.arrayBuffer())
-        const ct = resp.headers.get('content-type') ?? ''
-        const ext = ct.includes('png') ? 'png' : ct.includes('gif') ? 'gif' : 'jpg'
+        let buf: Buffer
+        let ext: string
+        if (op.base64 != null) {
+          const decoded = attachmentImageBytes(op.base64, op.ext ?? '')
+          if (!decoded) return null
+          ;({ buf, ext } = decoded)
+        } else {
+          const resp = await fetchRemoteImage(String(op.url))
+          if (!resp || !resp.ok) return null
+          buf = Buffer.from(await resp.arrayBuffer())
+          const ct = resp.headers.get('content-type') ?? ''
+          ext = ct.includes('png') ? 'png' : ct.includes('gif') ? 'gif' : 'jpg'
+        }
         pushHistory(session)
         const ok = replacePictureBytes(
           session.opened,

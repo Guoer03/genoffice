@@ -20,7 +20,7 @@ import {
   releaseFragmentsAtEdit,
   applySelectionParagraphFormat,
 } from '../src/renderer/TextEditOverlay'
-import { applyEditParagraphs, collectParagraphFormatPatches } from '../src/main/edit-text'
+import { applyEditParagraphs, collectParagraphFormatPatches } from '@genoffice/pptx-ops'
 
 const vp = makeViewport({ cx: 12192000, cy: 6858000 }, 1280) // scale = 1
 const metrics = new HeuristicMetrics()
@@ -147,6 +147,28 @@ describe('run fragmentation: layout fragments merge back into original runs by s
     const out = roundTrip(paras, 90) // narrow box forces wrapping
     expect(out[0]!.runs).toHaveLength(1)
     expect(out[0]!.runs[0]!.text).toBe('Hello World Again')
+  })
+
+  it('restored wrap-swallowed spaces flow naturally, never inside a fixed-width fragment (words glued after reflow)', () => {
+    // The engine strips the space at each wrap point before measuring, so no fixed fragment
+    // advance accounts for it. A restored space baked into a fixed-width fragment renders
+    // zero-width once an edit reflows it mid-line ("scriptautant", "quevous").
+    const div = document.createElement('div')
+    document.body.appendChild(div)
+    populateEditorDom(
+      div,
+      layout([{ runs: [{ text: 'Hello World Again', fontSize: 18 }] }], 90).lines,
+    )
+    const fragments = [...div.querySelectorAll<HTMLElement>('[data-layout-fragment]')]
+    const restored = fragments.filter((f) => /^\s+$/.test(f.textContent ?? ''))
+    expect(restored.length).toBeGreaterThan(0) // the narrow box wrapped at least once
+    for (const f of restored) {
+      expect(f.style.width).toBe('')
+      expect(f.style.display).toBe('')
+    }
+    // and the text still round-trips losslessly through extraction
+    expect(extractParagraphs(div, 1)[0]!.runs[0]!.text).toBe('Hello World Again')
+    div.remove()
   })
 
   it('hard-wrapped long URL no longer gets spaces injected (historical bug: URL rewritten after one edit round-trip)', () => {
@@ -404,6 +426,60 @@ describe('applyEditParagraphs: srcPara/srcRun tracing + unedited fields preserve
     )
     expect(out3[0]!.runs[0]!.underline).toBe(false)
     expect(out3[0]!.runs[0]!.underlineExplicitNone).toBeUndefined()
+    // un-underlining a run that KEEPS its link must bake the explicit none in,
+    // or the reparse re-derives the link underline and the removal never sticks
+    const out4 = applyEditParagraphs(
+      [
+        {
+          runs: [
+            { text: 'l', underline: true, underlineImplicit: true, hyperlink: 'https://a.com' },
+          ],
+        },
+      ],
+      [
+        {
+          runs: [{ text: 'l', srcRun: 0, bold: false, italic: false, underline: false }],
+          srcPara: 0,
+        },
+      ],
+    )
+    expect(out4[0]!.runs[0]!.underline).toBe(false)
+    expect(out4[0]!.runs[0]!.underlineExplicitNone).toBe(true)
+    expect(out4[0]!.runs[0]!.underlineImplicit).toBeUndefined()
+    expect(out4[0]!.runs[0]!.hyperlink).toBe('https://a.com')
+    // same when the edit re-states the link explicitly (link kept, not removed)
+    const out5 = applyEditParagraphs(
+      [
+        {
+          runs: [
+            {
+              text: 'l',
+              underline: true,
+              underlineImplicit: true,
+              hyperlink: 'https://a.com',
+              hyperlinkRId: 'rId3',
+            },
+          ],
+        },
+      ],
+      [
+        {
+          runs: [
+            {
+              text: 'l',
+              srcRun: 0,
+              bold: false,
+              italic: false,
+              underline: false,
+              link: { kind: 'url', url: 'https://a.com' },
+            },
+          ],
+          srcPara: 0,
+        },
+      ],
+    )
+    expect(out5[0]!.runs[0]!.underline).toBe(false)
+    expect(out5[0]!.runs[0]!.underlineExplicitNone).toBe(true)
   })
 
   it('no srcPara/srcRun (newly typed paragraph) falls back to position without crashing', () => {
@@ -1047,6 +1123,23 @@ describe('per-paragraph format on the editing selection', () => {
       { index: 2, patch: { bullet: 'none', spaceAfterPt: 6 } },
     ])
   })
+
+  it('numbering scheme / start number / picture source travel with the marks', () => {
+    const img = { base64: 'AAAA', ext: 'png' }
+    const out = collectParagraphFormatPatches([
+      { runs: [{ text: 'a' }], bullet: 'number', numType: 'romanUcPeriod', startAt: 3 },
+      { runs: [{ text: 'b' }], numType: 'alphaLcParenR' },
+      { runs: [{ text: 'c' }], bullet: 'blip', bulletImage: img },
+      // a char pick never carries a stale scheme
+      { runs: [{ text: 'd' }], bullet: 'char', bulletChar: '★', numType: 'arabicPeriod' },
+    ])
+    expect(out).toEqual([
+      { index: 0, patch: { bullet: 'number', numType: 'romanUcPeriod', startAt: 3 } },
+      { index: 1, patch: { numType: 'alphaLcParenR' } },
+      { index: 2, patch: { bullet: 'blip', bulletImage: img } },
+      { index: 3, patch: { bullet: 'char', bulletChar: '★' } },
+    ])
+  })
 })
 
 describe('run hyperlinks: overlay round-trip + merge semantics', () => {
@@ -1153,6 +1246,84 @@ describe('vertical text editing (bodyPr vert)', () => {
     expect(div.children.length).toBe(1)
     const out = extractParagraphs(div, 1)
     expect(out.map((p) => p.runs.map((r) => r.text).join('')).join('\n')).toBe(text)
+    div.remove()
+  })
+
+  it('eaVert cells carry the engine pitch as letter-spacing (CSS advances 1em, the canvas by the line box)', () => {
+    // CJK-like face: ascent+descent = 1.2em, so each upright cell must gain 0.2em after it;
+    // its ink drops by ascent − 0.88em (the canvas draws at the cell baseline)
+    const cjkMetrics: typeof metrics = Object.assign(Object.create(metrics), {
+      metrics: (st: { fontSizePx: number }) => ({
+        ascent: st.fontSizePx * 1.0,
+        descent: st.fontSizePx * 0.2,
+        lineHeight: st.fontSizePx * 1.2,
+      }),
+    })
+    const lines = layoutText({
+      body: {
+        paragraphs: [{ runs: [{ text: '\u5149\u74f6\u9152 2024', fontSize: 30 }] }],
+        insets: NO_INSETS,
+        vert: 'eaVert',
+      },
+      boxWidthPx: 400,
+      boxHeightPx: 400,
+      metrics: cjkMetrics,
+      vp,
+    }).lines
+    const div = document.createElement('div')
+    document.body.appendChild(div)
+    populateEditorDom(div, lines, 0, undefined, true)
+    const frags = [...div.querySelectorAll<HTMLElement>('[data-layout-fragment]')]
+    const px = lines[0]!.runs[0]!.fontSizePx
+    const cjk = frags.filter((f) => /[\u4e00-\u9fff]/.test(f.textContent ?? ''))
+    expect(cjk).toHaveLength(3)
+    for (const f of cjk) {
+      expect(parseFloat(f.style.letterSpacing)).toBeCloseTo(px * 0.2, 3)
+      expect(f.style.position).toBe('relative')
+      expect(parseFloat(f.style.top)).toBeCloseTo(px * 0.12, 3)
+    }
+    // the rotated Latin word advances by its own width on both sides: no spacing, no drop
+    const latin = frags.find((f) => f.textContent === '2024')!
+    expect(latin.style.letterSpacing).toBe('')
+    expect(latin.style.top).toBe('')
+    // mixed sizes in one column: each cell's pitch is its own line box, not the baseline delta
+    populateEditorDom(
+      div,
+      layoutText({
+        body: {
+          paragraphs: [
+            {
+              runs: [
+                { text: '\u5149', fontSize: 30 },
+                { text: '\u74f6\u9152', fontSize: 15 },
+              ],
+            },
+          ],
+          insets: NO_INSETS,
+          vert: 'eaVert',
+        },
+        boxWidthPx: 400,
+        boxHeightPx: 400,
+        metrics: cjkMetrics,
+        vp,
+      }).lines,
+      0,
+      undefined,
+      true,
+    )
+    const mixed = [...div.querySelectorAll<HTMLElement>('[data-layout-fragment]')].map((f) =>
+      parseFloat(f.style.letterSpacing),
+    )
+    expect(mixed[0]).toBeCloseTo(px * 0.2, 3)
+    expect(mixed[1]).toBeCloseTo((px / 2) * 0.2, 3)
+    expect(mixed[2]).toBeCloseTo((px / 2) * 0.2, 3)
+    // the horizontal editor never gets the synthetic spacing
+    populateEditorDom(div, layout([{ runs: [{ text: '\u5149\u74f6\u9152', fontSize: 30 }] }]).lines)
+    expect(
+      [...div.querySelectorAll<HTMLElement>('[data-layout-fragment]')].every(
+        (f) => f.style.letterSpacing === '',
+      ),
+    ).toBe(true)
     div.remove()
   })
 

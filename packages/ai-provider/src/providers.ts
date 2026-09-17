@@ -2,6 +2,20 @@ import { defaultAiMediaSettings, resolveAiMediaSettings } from './media'
 import { defaultAiSearchSettings, resolveAiSearchSettings } from './search-settings'
 import type { AiProviderId, AiProviderMeta, AiSettings, LegacyAiSettings } from './types'
 
+/**
+ * OpenCode Zen / Go route and cache per conversation and answer 400
+ * MissingSessionID without this header (genoffice#331). The renderer's
+ * transport id is stable for a chat; a one-shot call is its own conversation.
+ */
+export function opencodeSessionHeaders(
+  baseUrl: string | undefined,
+  sessionId?: string,
+): Record<string, string> {
+  return baseUrl?.startsWith('https://opencode.ai/')
+    ? { 'x-opencode-session': sessionId || crypto.randomUUID() }
+    : {}
+}
+
 export const AI_PROVIDERS: AiProviderMeta[] = [
   {
     id: 'codex',
@@ -265,14 +279,16 @@ export function activeProvider(settings: AiSettings): AiProviderId {
   const config = settings.providers?.[provider]
   if (!meta || !config) return 'claude-code'
   if (meta.needsCliPath) return provider
-  if (!config.model) return 'claude-code'
+  // Trim-aware: in-memory settings bypass the trimConfigs applied to
+  // persisted files, and a whitespace-only key/URL/model is a 401, not a config.
+  if (!config.model?.trim()) return 'claude-code'
   if (meta.needsBaseUrl) {
     // Custom OpenAI-compatible endpoints (Ollama, LM Studio, vLLM) accept
     // anonymous requests: base URL + model suffice, the key stays optional.
-    if (!config.baseUrl) return 'claude-code'
+    if (!config.baseUrl?.trim()) return 'claude-code'
     return provider
   }
-  if (!config.apiKey) return 'claude-code'
+  if (!config.apiKey?.trim()) return 'claude-code'
   return provider
 }
 

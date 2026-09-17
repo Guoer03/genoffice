@@ -1,5 +1,6 @@
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import {
+  appendFileSync,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -8,8 +9,20 @@ import {
   unlinkSync,
   writeFileSync,
 } from 'node:fs'
-import { copyFile, mkdir, readFile, readdir, stat, unlink, writeFile } from 'node:fs/promises'
-import { basename, join } from 'node:path'
+import {
+  copyFile,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  unlink,
+  writeFile,
+} from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { basename, dirname, extname, isAbsolute, join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import {
   BrowserWindow,
   Menu,
@@ -30,13 +43,21 @@ import {
   fetchRemoteImage,
   installContextMenu,
   installNavigationGuard,
+  isHeadlessMode,
   printHtmlToPdf,
   safeExternalUrl,
   saveAsSuggestion,
+  saveImageFromUrl,
   showOpenDialogWithMemory,
   showSaveDialogWithMemory,
+  aboutMenuItem,
   toggleDevToolsItem,
   windowMenuTemplate,
+  type HeadlessExportFormat,
+  type HeadlessExportTarget,
+  installRendererProtocol,
+  registerRendererScheme,
+  rendererUrl,
 } from '@genoffice/electron-utils'
 import { configureMetricsCache, familyVerticalMetrics } from '@genoffice/font-metrics'
 import { createI18n, getUiLang, normalizeLang, setUiLang } from '@genoffice/i18n'
@@ -49,6 +70,8 @@ import type {
   WebContents,
 } from 'electron'
 import { parseFileToText } from '@genoffice/file-parse'
+import { convertHtmlToDocx } from '../../../../packages/html2docx/src'
+import { ElectronBrowserDriver } from '../../../../packages/html2docx/src/drivers/electron'
 import {
   AiCreditsError,
   AiTimeoutError,
@@ -117,6 +140,7 @@ import {
 } from './docx-encryption'
 import { isExternallyModified, type DiskFileState } from './external-change'
 import { initDocsAutoUpdater } from './updater'
+import { registerZoteroIpc, teardownZoteroIpc } from './zotero-ipc'
 
 /**
  * Docs main-process logic as an embeddable module: no top-level side effects.
@@ -153,6 +177,7 @@ const tMain = createI18n({
     filterAll: '所有文件',
     dlgExportPdf: '导出为 PDF',
     dlgExportHtml: '导出为 HTML',
+    dlgPickExportDir: '选择导出目录',
     errUnsupportedExt: '暂不支持 .{ext} 类型',
     errNotFile: '不是文件',
     errTooLarge: '超过 {mb}MB 上限',
@@ -176,6 +201,7 @@ const tMain = createI18n({
     menuPageSetup: '页面设置…',
     menuExportPdf: '导出为 PDF…',
     menuExportHtml: '导出为 HTML…',
+    menuExportImages: '导出为图片…',
     menuPrint: '打印…',
     menuEdit: '编辑',
     menuUndo: '撤销',
@@ -247,6 +273,7 @@ const tMain = createI18n({
     filterAll: 'All Files',
     dlgExportPdf: 'Export as PDF',
     dlgExportHtml: 'Export as HTML',
+    dlgPickExportDir: 'Choose Export Folder',
     errUnsupportedExt: '.{ext} files are not supported',
     errNotFile: 'not a file',
     errTooLarge: 'exceeds the {mb}MB limit',
@@ -270,6 +297,7 @@ const tMain = createI18n({
     menuPageSetup: 'Page Setup…',
     menuExportPdf: 'Export as PDF…',
     menuExportHtml: 'Export as HTML…',
+    menuExportImages: 'Export as Images…',
     menuPrint: 'Print…',
     menuEdit: 'Edit',
     menuUndo: 'Undo',
@@ -340,6 +368,7 @@ const tMain = createI18n({
     filterAll: 'すべてのファイル',
     dlgExportPdf: 'PDF としてエクスポート',
     dlgExportHtml: 'HTML としてエクスポート',
+    dlgPickExportDir: 'エクスポート先フォルダーの選択',
     errUnsupportedExt: '.{ext} 形式には対応していません',
     errNotFile: 'ファイルではありません',
     errTooLarge: '{mb}MB の上限を超えています',
@@ -364,6 +393,7 @@ const tMain = createI18n({
     menuPageSetup: 'ページ設定…',
     menuExportPdf: 'PDF としてエクスポート…',
     menuExportHtml: 'HTML としてエクスポート…',
+    menuExportImages: '画像としてエクスポート…',
     menuPrint: '印刷…',
     menuEdit: '編集',
     menuUndo: '元に戻す',
@@ -435,6 +465,7 @@ const tMain = createI18n({
     filterAll: '모든 파일',
     dlgExportPdf: 'PDF로 내보내기',
     dlgExportHtml: 'HTML로 내보내기',
+    dlgPickExportDir: '내보낼 폴더 선택',
     errUnsupportedExt: '.{ext} 형식은 지원되지 않습니다',
     errNotFile: '파일이 아닙니다',
     errTooLarge: '{mb}MB 제한을 초과했습니다',
@@ -459,6 +490,7 @@ const tMain = createI18n({
     menuPageSetup: '페이지 설정…',
     menuExportPdf: 'PDF로 내보내기…',
     menuExportHtml: 'HTML로 내보내기…',
+    menuExportImages: '이미지로 내보내기…',
     menuPrint: '인쇄…',
     menuEdit: '편집',
     menuUndo: '실행 취소',
@@ -531,6 +563,7 @@ const tMain = createI18n({
     filterAll: 'Tous les fichiers',
     dlgExportPdf: 'Exporter au format PDF',
     dlgExportHtml: 'Exporter au format HTML',
+    dlgPickExportDir: "Choisir le dossier d'exportation",
     errUnsupportedExt: 'les fichiers .{ext} ne sont pas pris en charge',
     errNotFile: "n'est pas un fichier",
     errTooLarge: 'dépasse la limite de {mb} Mo',
@@ -555,6 +588,7 @@ const tMain = createI18n({
     menuPageSetup: 'Mise en page…',
     menuExportPdf: 'Exporter au format PDF…',
     menuExportHtml: 'Exporter au format HTML…',
+    menuExportImages: 'Exporter en images…',
     menuPrint: 'Imprimer…',
     menuEdit: 'Édition',
     menuUndo: 'Annuler',
@@ -627,6 +661,7 @@ const tMain = createI18n({
     filterAll: 'Alle Dateien',
     dlgExportPdf: 'Als PDF exportieren',
     dlgExportHtml: 'Als HTML exportieren',
+    dlgPickExportDir: 'Exportordner auswählen',
     errUnsupportedExt: '.{ext}-Dateien werden nicht unterstützt',
     errNotFile: 'keine Datei',
     errTooLarge: 'überschreitet das Limit von {mb} MB',
@@ -651,6 +686,7 @@ const tMain = createI18n({
     menuPageSetup: 'Seite einrichten…',
     menuExportPdf: 'Als PDF exportieren…',
     menuExportHtml: 'Als HTML exportieren…',
+    menuExportImages: 'Als Bilder exportieren…',
     menuPrint: 'Drucken…',
     menuEdit: 'Bearbeiten',
     menuUndo: 'Rückgängig',
@@ -722,6 +758,7 @@ const tMain = createI18n({
     filterAll: 'Todos los archivos',
     dlgExportPdf: 'Exportar como PDF',
     dlgExportHtml: 'Exportar como HTML',
+    dlgPickExportDir: 'Elegir carpeta de exportación',
     errUnsupportedExt: 'los archivos .{ext} no son compatibles',
     errNotFile: 'no es un archivo',
     errTooLarge: 'supera el límite de {mb} MB',
@@ -747,6 +784,7 @@ const tMain = createI18n({
     menuPageSetup: 'Configurar página…',
     menuExportPdf: 'Exportar como PDF…',
     menuExportHtml: 'Exportar como HTML…',
+    menuExportImages: 'Exportar como imágenes…',
     menuPrint: 'Imprimir…',
     menuEdit: 'Edición',
     menuUndo: 'Deshacer',
@@ -817,6 +855,7 @@ const tMain = createI18n({
     filterAll: 'ไฟล์ทั้งหมด',
     dlgExportPdf: 'ส่งออกเป็น PDF',
     dlgExportHtml: 'ส่งออกเป็น HTML',
+    dlgPickExportDir: 'เลือกโฟลเดอร์ส่งออก',
     errUnsupportedExt: 'ไม่รองรับไฟล์ .{ext}',
     errNotFile: 'ไม่ใช่ไฟล์',
     errTooLarge: 'เกินขีดจำกัด {mb}MB',
@@ -841,6 +880,7 @@ const tMain = createI18n({
     menuPageSetup: 'ตั้งค่าหน้ากระดาษ…',
     menuExportPdf: 'ส่งออกเป็น PDF…',
     menuExportHtml: 'ส่งออกเป็น HTML…',
+    menuExportImages: 'ส่งออกเป็นรูปภาพ…',
     menuPrint: 'พิมพ์…',
     menuEdit: 'แก้ไข',
     menuUndo: 'เลิกทำ',
@@ -912,6 +952,7 @@ const tMain = createI18n({
     filterAll: 'Semua File',
     dlgExportPdf: 'Ekspor sebagai PDF',
     dlgExportHtml: 'Ekspor sebagai HTML',
+    dlgPickExportDir: 'Pilih Folder Ekspor',
     errUnsupportedExt: 'file .{ext} tidak didukung',
     errNotFile: 'bukan file',
     errTooLarge: 'melebihi batas {mb}MB',
@@ -936,6 +977,7 @@ const tMain = createI18n({
     menuPageSetup: 'Penyetelan Halaman…',
     menuExportPdf: 'Ekspor sebagai PDF…',
     menuExportHtml: 'Ekspor sebagai HTML…',
+    menuExportImages: 'Ekspor sebagai gambar…',
     menuPrint: 'Cetak…',
     menuEdit: 'Edit',
     menuUndo: 'Urungkan',
@@ -1007,6 +1049,7 @@ const tMain = createI18n({
     filterAll: 'Все файлы',
     dlgExportPdf: 'Экспорт в PDF',
     dlgExportHtml: 'Экспорт в HTML',
+    dlgPickExportDir: 'Выбор папки для экспорта',
     errUnsupportedExt: 'файлы .{ext} не поддерживаются',
     errNotFile: 'не является файлом',
     errTooLarge: 'превышает лимит {mb} МБ',
@@ -1031,6 +1074,7 @@ const tMain = createI18n({
     menuPageSetup: 'Параметры страницы…',
     menuExportPdf: 'Экспорт в PDF…',
     menuExportHtml: 'Экспорт в HTML…',
+    menuExportImages: 'Экспорт в изображения…',
     menuPrint: 'Печать…',
     menuEdit: 'Правка',
     menuUndo: 'Отменить',
@@ -1102,6 +1146,7 @@ const tMain = createI18n({
     filterAll: 'كل الملفات',
     dlgExportPdf: 'تصدير بتنسيق PDF',
     dlgExportHtml: 'تصدير بتنسيق HTML',
+    dlgPickExportDir: 'اختيار مجلد التصدير',
     errUnsupportedExt: 'ملفات .{ext} غير مدعومة',
     errNotFile: 'ليس ملفًا',
     errTooLarge: 'يتجاوز الحد {mb}MB',
@@ -1126,6 +1171,7 @@ const tMain = createI18n({
     menuPageSetup: 'إعداد الصفحة…',
     menuExportPdf: 'تصدير بتنسيق PDF…',
     menuExportHtml: 'تصدير بتنسيق HTML…',
+    menuExportImages: 'تصدير كصور…',
     menuPrint: 'طباعة…',
     menuEdit: 'تحرير',
     menuUndo: 'تراجع',
@@ -1197,6 +1243,7 @@ const tMain = createI18n({
     filterAll: 'Todos os Arquivos',
     dlgExportPdf: 'Exportar como PDF',
     dlgExportHtml: 'Exportar como HTML',
+    dlgPickExportDir: 'Escolher Pasta de Exportação',
     errUnsupportedExt: 'arquivos .{ext} não são suportados',
     errNotFile: 'não é um arquivo',
     errTooLarge: 'excede o limite de {mb}MB',
@@ -1221,6 +1268,7 @@ const tMain = createI18n({
     menuPageSetup: 'Configurar Página…',
     menuExportPdf: 'Exportar como PDF…',
     menuExportHtml: 'Exportar como HTML…',
+    menuExportImages: 'Exportar como imagens…',
     menuPrint: 'Imprimir…',
     menuEdit: 'Editar',
     menuUndo: 'Desfazer',
@@ -1292,6 +1340,7 @@ const tMain = createI18n({
     filterAll: 'Tutti i file',
     dlgExportPdf: 'Esporta come PDF',
     dlgExportHtml: 'Esporta come HTML',
+    dlgPickExportDir: 'Scegli la cartella di esportazione',
     errUnsupportedExt: 'i file .{ext} non sono supportati',
     errNotFile: 'non è un file',
     errTooLarge: 'supera il limite di {mb} MB',
@@ -1316,6 +1365,7 @@ const tMain = createI18n({
     menuPageSetup: 'Imposta pagina…',
     menuExportPdf: 'Esporta come PDF…',
     menuExportHtml: 'Esporta come HTML…',
+    menuExportImages: 'Esporta come immagini…',
     menuPrint: 'Stampa…',
     menuEdit: 'Modifica',
     menuUndo: 'Annulla',
@@ -1387,6 +1437,7 @@ const tMain = createI18n({
     filterAll: 'Wszystkie pliki',
     dlgExportPdf: 'Eksportuj jako PDF',
     dlgExportHtml: 'Eksportuj jako HTML',
+    dlgPickExportDir: 'Wybierz folder eksportu',
     errUnsupportedExt: 'pliki .{ext} nie są obsługiwane',
     errNotFile: 'to nie jest plik',
     errTooLarge: 'przekracza limit {mb} MB',
@@ -1411,6 +1462,7 @@ const tMain = createI18n({
     menuPageSetup: 'Ustawienia strony…',
     menuExportPdf: 'Eksportuj jako PDF…',
     menuExportHtml: 'Eksportuj jako HTML…',
+    menuExportImages: 'Eksportuj jako obrazy…',
     menuPrint: 'Drukuj…',
     menuEdit: 'Edycja',
     menuUndo: 'Cofnij',
@@ -1482,6 +1534,7 @@ const tMain = createI18n({
     filterAll: 'Všechny soubory',
     dlgExportPdf: 'Exportovat jako PDF',
     dlgExportHtml: 'Exportovat jako HTML',
+    dlgPickExportDir: 'Zvolte složku pro export',
     errUnsupportedExt: 'soubory .{ext} nejsou podporovány',
     errNotFile: 'není soubor',
     errTooLarge: 'překračuje limit {mb} MB',
@@ -1506,6 +1559,7 @@ const tMain = createI18n({
     menuPageSetup: 'Vzhled stránky…',
     menuExportPdf: 'Exportovat jako PDF…',
     menuExportHtml: 'Exportovat jako HTML…',
+    menuExportImages: 'Exportovat jako obrázky…',
     menuPrint: 'Tisk…',
     menuEdit: 'Úpravy',
     menuUndo: 'Zpět',
@@ -1577,6 +1631,7 @@ const tMain = createI18n({
     filterAll: 'Alle bestanden',
     dlgExportPdf: 'Exporteren als PDF',
     dlgExportHtml: 'Exporteren als HTML',
+    dlgPickExportDir: 'Exportmap kiezen',
     errUnsupportedExt: '.{ext}-bestanden worden niet ondersteund',
     errNotFile: 'geen bestand',
     errTooLarge: 'overschrijdt de limiet van {mb} MB',
@@ -1601,6 +1656,7 @@ const tMain = createI18n({
     menuPageSetup: 'Pagina-instelling…',
     menuExportPdf: 'Exporteren als PDF…',
     menuExportHtml: 'Exporteren als HTML…',
+    menuExportImages: 'Exporteren als afbeeldingen…',
     menuPrint: 'Afdrukken…',
     menuEdit: 'Bewerken',
     menuUndo: 'Ongedaan maken',
@@ -1672,6 +1728,7 @@ const tMain = createI18n({
     filterAll: 'Semua Fail',
     dlgExportPdf: 'Eksport sebagai PDF',
     dlgExportHtml: 'Eksport sebagai HTML',
+    dlgPickExportDir: 'Pilih Folder Eksport',
     errUnsupportedExt: 'fail .{ext} tidak disokong',
     errNotFile: 'bukan fail',
     errTooLarge: 'melebihi had {mb}MB',
@@ -1696,6 +1753,7 @@ const tMain = createI18n({
     menuPageSetup: 'Persediaan Halaman…',
     menuExportPdf: 'Eksport sebagai PDF…',
     menuExportHtml: 'Eksport sebagai HTML…',
+    menuExportImages: 'Eksport sebagai imej…',
     menuPrint: 'Cetak…',
     menuEdit: 'Edit',
     menuUndo: 'Buat Asal',
@@ -1766,6 +1824,7 @@ const tMain = createI18n({
     filterAll: 'כל הקבצים',
     dlgExportPdf: 'ייצוא כ-PDF',
     dlgExportHtml: 'ייצוא כ-HTML',
+    dlgPickExportDir: 'בחירת תיקיית ייצוא',
     errUnsupportedExt: 'קובצי .{ext} אינם נתמכים',
     errNotFile: 'אינו קובץ',
     errTooLarge: 'חורג מהמגבלה של {mb}MB',
@@ -1790,6 +1849,7 @@ const tMain = createI18n({
     menuPageSetup: 'הגדרת עמוד…',
     menuExportPdf: 'ייצוא כ-PDF…',
     menuExportHtml: 'ייצוא כ-HTML…',
+    menuExportImages: 'ייצוא כתמונות…',
     menuPrint: 'הדפסה…',
     menuEdit: 'עריכה',
     menuUndo: 'בטל',
@@ -1861,6 +1921,7 @@ const tMain = createI18n({
     filterAll: 'सभी फ़ाइलें',
     dlgExportPdf: 'PDF के रूप में निर्यात करें',
     dlgExportHtml: 'HTML के रूप में निर्यात करें',
+    dlgPickExportDir: 'निर्यात फ़ोल्डर चुनें',
     errUnsupportedExt: '.{ext} फ़ाइलें समर्थित नहीं हैं',
     errNotFile: 'फ़ाइल नहीं है',
     errTooLarge: '{mb}MB की सीमा से अधिक है',
@@ -1885,6 +1946,7 @@ const tMain = createI18n({
     menuPageSetup: 'पृष्ठ सेटअप…',
     menuExportPdf: 'PDF के रूप में निर्यात करें…',
     menuExportHtml: 'HTML के रूप में निर्यात करें…',
+    menuExportImages: 'छवियों के रूप में निर्यात…',
     menuPrint: 'प्रिंट करें…',
     menuEdit: 'संपादन',
     menuUndo: 'पूर्ववत करें',
@@ -1955,6 +2017,7 @@ const tMain = createI18n({
     filterAll: '所有檔案',
     dlgExportPdf: '匯出為 PDF',
     dlgExportHtml: '匯出為 HTML',
+    dlgPickExportDir: '選擇匯出目錄',
     errUnsupportedExt: '暫不支援 .{ext} 類型',
     errNotFile: '不是檔案',
     errTooLarge: '超過 {mb}MB 上限',
@@ -1978,6 +2041,7 @@ const tMain = createI18n({
     menuPageSetup: '版面設定…',
     menuExportPdf: '匯出為 PDF…',
     menuExportHtml: '匯出為 HTML…',
+    menuExportImages: '匯出為圖片…',
     menuPrint: '列印…',
     menuEdit: '編輯',
     menuUndo: '復原',
@@ -2319,6 +2383,11 @@ function allowDocWrite(wcId: number, filePath: string): void {
   docWritablePaths.set(wcId, set)
 }
 
+/** MCP save_session: the shell resolved this path for the tab, so docs:save-to may write it */
+export function authorizeMcpDocWrite(wcId: number, filePath: string): void {
+  allowDocWrite(wcId, filePath)
+}
+
 function canDocWrite(wcId: number, filePath: string): boolean {
   return docWritablePaths.get(wcId)?.has(filePath) === true
 }
@@ -2339,9 +2408,22 @@ function canPdfWrite(wcId: number, filePath: string): boolean {
   return pdfWritablePaths.get(wcId)?.has(filePath) === true
 }
 
+// Export as images runs the regular PDF export against a temp file: that file must
+// not be revealed like a user export, and only the tab that asked may read it back
+// (or write PNGs into the folder it picked).
+const imageExportTemps = new Map<number, Set<string>>()
+const imageExportDirs = new Map<number, Set<string>>()
+
+function isImageExportTemp(wcId: number, filePath: string): boolean {
+  return imageExportTemps.get(wcId)?.has(filePath) === true
+}
+
 function dropDocWriter(wcId: number): void {
   docWritablePaths.delete(wcId)
   pdfWritablePaths.delete(wcId)
+  for (const p of imageExportTemps.get(wcId) ?? []) void rm(p, { force: true })
+  imageExportTemps.delete(wcId)
+  imageExportDirs.delete(wcId)
   docDiskStates.delete(wcId)
   // Destroyed renderers count as torn down too: window-close paths never run
   // teardownDocsRenderer, but an in-flight save handler resuming after the
@@ -2387,6 +2469,7 @@ async function diskChangedExternally(wcId: number, filePath: string): Promise<bo
  * workaround), so the orphan must lose write access and stop its timers — otherwise
  * its 30s recovery loop resurrects content the user already discarded. */
 export function teardownDocsRenderer(contents: WebContents): void {
+  teardownZoteroIpc(contents)
   tornDownWcIds.add(contents.id)
   // Sweep recovery copies for this renderer's documents: every non-crash close
   // either saved (docs:save already cleared it) or explicitly discarded, so a
@@ -3080,50 +3163,15 @@ export function registerProjectIpc(): void {
       return { projectId: args.projectId, chatId: args.newChatId ?? args.tempChatId }
     },
   )
-
-  // ── P1 extension IPC ─────────────────────────────────────
-
-  /** List all projects (with file count + last-active time) */
-  ipcMain.handle('project:list', () => {
-    return getProjectStore().listProjectsSummary()
-  })
-
-  /** List existing files belonging to one project */
-  ipcMain.handle('project:files', (_event, args: { projectId: string }) => {
-    return getProjectStore().listProjectFiles(args.projectId)
-  })
-
-  /** Create a project */
-  ipcMain.handle('project:create', (_event, args: { name: string }) => {
-    const store = getProjectStore()
-    const data = store.createProject(args.name)
-    // returns ProjectSummary shape
-    return store.listProjectsSummary().find((s) => s.id === data.id) ?? data
-  })
-
-  /** Rename a project */
-  ipcMain.handle('project:rename', (_event, args: { id: string; name: string }) => {
-    getProjectStore().renameProject(args.id, args.name)
-  })
-
-  /** Soft-delete a project */
-  ipcMain.handle('project:delete', (_event, args: { id: string }) => {
-    getProjectStore().deleteProject(args.id)
-  })
-
-  /** Move a file into the given project */
-  ipcMain.handle('project:moveFile', (_event, args: { filePath: string; projectId: string }) => {
-    getProjectStore().moveFileToProject(args.filePath, args.projectId)
-  })
-
-  /** Get the project timeline */
-  ipcMain.handle('project:timeline', (_event, args: { projectId: string; limit?: number }) => {
-    return getProjectStore().getProjectTimeline(args.projectId, args.limit ?? 20)
-  })
 }
+
+/** A4 at 96dpi, as the HTML app exports */
+const ALT_CHUNK_VIEWPORT = { width: 794, height: 1123, deviceScaleFactor: 2 }
+const ALT_CHUNK_HTML_MAX_CHARS = 64 * 1024 * 1024
 
 /** document/attachment/window IPC (everything except the AI proxy above) */
 export function registerDocsIpc(): void {
+  registerZoteroIpc()
   // Node fetch (undici) direct connections get reset under VPN/tun setups; retry over Chromium's stack
   setRescueFetch((url, init) => net.fetch(url, init))
   setAiUserAgent(`GenOffice/${app.getVersion()}`)
@@ -3148,6 +3196,32 @@ export function registerDocsIpc(): void {
   })
 
   ipcMain.handle('docs:open-path', (event, filePath: string) => loadDocx(filePath, event.sender.id))
+
+  // w:altChunk HTML: the same html2docx chain as the HTML app's export, in a
+  // hidden window; the renderer parses the result and shows its blocks
+  ipcMain.handle('docs:altchunk-html-to-docx', async (_event, html: unknown) => {
+    if (typeof html !== 'string' || !html.trim() || html.length > ALT_CHUNK_HTML_MAX_CHARS) {
+      return null
+    }
+    const workDir = await mkdtemp(join(tmpdir(), 'genoffice-altchunk-'))
+    let driver: ElectronBrowserDriver | null = null
+    try {
+      const htmlPath = join(workDir, 'chunk.html')
+      // the BOM outranks a stale <meta charset> left in the decoded markup
+      await writeFile(htmlPath, `\ufeff${html}`, 'utf8')
+      driver = await ElectronBrowserDriver.create(ALT_CHUNK_VIEWPORT)
+      const { docx } = await convertHtmlToDocx({ url: pathToFileURL(htmlPath).href }, driver, {
+        naturalTableWidth: true,
+      })
+      return docx
+    } catch (err) {
+      console.warn('[docs] altChunk conversion failed:', err)
+      return null
+    } finally {
+      await driver?.close()
+      await rm(workDir, { recursive: true, force: true }).catch(() => {})
+    }
+  })
 
   // Review > Protect > Encrypt with Password: set/clear the open password.
   // Takes effect on the next save (docs:save / save-as / save-new all consult the store).
@@ -3237,6 +3311,25 @@ export function registerDocsIpc(): void {
     const content = pendingAiDocContents.get(event.sender.id) ?? null
     pendingAiDocContents.delete(event.sender.id)
     return content
+  })
+
+  // ---- headless export mode (--headless-export) ----
+
+  ipcMain.handle('docs:consume-headless-export', (event): HeadlessExportTarget | null => {
+    const target = headlessExportTargets.get(event.sender.id) ?? null
+    headlessExportTargets.delete(event.sender.id)
+    return target
+  })
+
+  ipcMain.on('docs:headless-export-done', (event, result: unknown) => {
+    const settle = headlessExportWaiters.get(event.sender.id)
+    if (!settle) return
+    headlessExportWaiters.delete(event.sender.id)
+    const state = result as { ok?: unknown; error?: unknown } | null
+    settle({
+      ok: state?.ok === true,
+      ...(typeof state?.error === 'string' ? { error: state.error } : {}),
+    })
   })
 
   ipcMain.handle(
@@ -3348,6 +3441,23 @@ export function registerDocsIpc(): void {
   // trusted Backspace would work too, but its deletion re-suppresses the
   // caret paragraph and that line stays unmarked) with ProseMirror's DOM
   // observer paused, so the round trip never becomes a transaction.
+  // spell-diag trace (intermittent squiggle loss, platform-bound
+  // and unreproducible on demand) — a tiny always-on log support can ask for.
+  // Size-capped: over 256KB the file restarts from its last half.
+  ipcMain.on('docs:spell-diag', (_event, line: unknown) => {
+    if (typeof line !== 'string' || line.length > 500) return
+    try {
+      const path = userDataPath('spell-diag.log')
+      if (existsSync(path) && statSync(path).size > 256 * 1024) {
+        const tail = readFileSync(path, 'utf-8').slice(-128 * 1024)
+        writeFileSync(path, tail.slice(tail.indexOf('\n') + 1))
+      }
+      appendFileSync(path, `${new Date().toISOString()} ${line}\n`)
+    } catch {
+      // diagnostics must never break the app
+    }
+  })
+
   ipcMain.handle('docs:respell-kick', async (event) => {
     const wc = event.sender
     if (tornDownWcIds.has(wc.id) || wc.isDestroyed()) return
@@ -3438,6 +3548,61 @@ export function registerDocsIpc(): void {
     'docs:create-document',
     (_event, request: CreateDocumentRequest): Promise<CreateDocumentResult> =>
       createAiDocument(request),
+  )
+
+  // MCP-driven output: write the live document to an explicit absolute path with
+  // no dialog. Mirrors docs:save-new's bookkeeping (write allowlist, disk state,
+  // recents, tab-title sync) but targets a caller-chosen path and refuses to
+  // clobber an existing file unless the caller asked for overwrite.
+  ipcMain.handle(
+    'docs:save-to',
+    async (event, filePath: string, data: ArrayBuffer, overwrite: boolean) => {
+      try {
+        if (tornDownWcIds.has(event.sender.id)) return { ok: false }
+        if (typeof filePath !== 'string' || !isAbsolute(filePath)) {
+          return { ok: false, error: 'path must be absolute' }
+        }
+        if (extname(filePath).toLowerCase() !== '.docx') {
+          return { ok: false, error: 'path must point to a .docx file' }
+        }
+        // only a target the MCP layer resolved for this tab may be written
+        if (!canDocWrite(event.sender.id, filePath)) {
+          return { ok: false, error: 'save target was not authorized' }
+        }
+        const existed = existsSync(filePath)
+        if (!overwrite && existed) {
+          return {
+            ok: false,
+            error: `file already exists: ${filePath} (pass overwrite:true to replace it)`,
+          }
+        }
+        await mkdir(dirname(filePath), { recursive: true })
+        const passwordState = snapshotDocPassword(event.sender.id, null)
+        const bytes = passwordState.password
+          ? encryptDocx(Buffer.from(data), passwordState.password)
+          : Buffer.from(data)
+        await atomicWriteFile(filePath, bytes)
+        // teardown may have happened while the write was in flight — only a file
+        // this handler created is safe to roll back; an overwritten one stays
+        const rollback = async (): Promise<{ ok: false }> => {
+          if (!existed) await unlink(filePath).catch(() => {})
+          return { ok: false }
+        }
+        if (tornDownWcIds.has(event.sender.id)) return rollback()
+        await rememberDiskState(event.sender.id, filePath, bytes)
+        if (tornDownWcIds.has(event.sender.id)) return rollback()
+        const passwordIntentPending = commitDocPasswordSave(
+          event.sender.id,
+          passwordState,
+          filePath,
+        )
+        pushRecent(filePath)
+        notifyFileSaved(event.sender, filePath)
+        return { ok: true, path: filePath, passwordIntentPending }
+      } catch (err) {
+        return { ok: false, error: String(err) }
+      }
+    },
   )
 
   ipcMain.handle('docs:recent', () =>
@@ -3633,11 +3798,76 @@ export function registerDocsIpc(): void {
           ...pdfScale(scale),
         })
         writeFileSync(filePath, data)
-        openGeneratedFile(filePath)
+        if (!isImageExportTemp(event.sender.id, filePath)) openGeneratedFile(filePath)
         return { ok: true, path: filePath }
       } catch (err) {
         // path is already authorized, so the renderer can retry chunked to the same target
         return { ok: false, error: String(err), path: filePath }
+      }
+    },
+  )
+
+  ipcMain.handle('docs:save-image-as', async (event, src: unknown) => {
+    if (tornDownWcIds.has(event.sender.id) || typeof src !== 'string') return { ok: false }
+    return saveImageFromUrl(dialogParent(event), src, {
+      title: tm('dlgSaveAs'),
+      fallbackDir: defaultSaveDir(),
+    })
+  })
+
+  ipcMain.handle('docs:pick-export-images-target', async (event) => {
+    let dir = testExportDir
+    if (!dir) {
+      const r = await openDialog(event, {
+        title: tm('dlgPickExportDir'),
+        properties: ['openDirectory', 'createDirectory'],
+      })
+      dir = r.canceled ? null : (r.filePaths[0] ?? null)
+    }
+    if (!dir) return null
+    const wcId = event.sender.id
+    const pdfPath = join(tmpdir(), `genoffice-docs-images-${randomUUID()}.pdf`)
+    allowPdfWrite(wcId, pdfPath)
+    imageExportTemps.set(wcId, (imageExportTemps.get(wcId) ?? new Set()).add(pdfPath))
+    imageExportDirs.set(wcId, (imageExportDirs.get(wcId) ?? new Set()).add(dir))
+    return { dir, pdfPath }
+  })
+
+  ipcMain.handle('docs:take-export-pdf', async (event, pdfPath: string) => {
+    const temps = imageExportTemps.get(event.sender.id)
+    if (typeof pdfPath !== 'string' || !temps?.has(pdfPath)) {
+      return { ok: false, error: 'not an image-export temp file' }
+    }
+    temps.delete(pdfPath)
+    try {
+      const data = await readFile(pdfPath)
+      return { ok: true, base64: data.toString('base64') }
+    } catch (err) {
+      return { ok: false, error: String(err) }
+    } finally {
+      await rm(pdfPath, { force: true })
+    }
+  })
+
+  ipcMain.handle(
+    'docs:write-export-image',
+    async (event, dir: string, fileName: string, pngBase64: string) => {
+      if (typeof dir !== 'string' || !imageExportDirs.get(event.sender.id)?.has(dir)) {
+        return { ok: false, error: 'export target is not an authorized folder' }
+      }
+      if (
+        typeof fileName !== 'string' ||
+        fileName !== basename(fileName) ||
+        !/^[^/\\]+\.png$/.test(fileName)
+      ) {
+        return { ok: false, error: 'invalid image file name' }
+      }
+      try {
+        const filePath = join(dir, fileName)
+        await writeFile(filePath, Buffer.from(String(pngBase64), 'base64'))
+        return { ok: true, path: filePath }
+      } catch (err) {
+        return { ok: false, error: String(err) }
       }
     },
   )
@@ -3718,7 +3948,7 @@ export function registerDocsIpc(): void {
           for (const page of pages) merged.addPage(page)
         }
         writeFileSync(filePath, Buffer.from(await merged.save()))
-        openGeneratedFile(filePath)
+        if (!isImageExportTemp(event.sender.id, filePath)) openGeneratedFile(filePath)
         return { ok: true, path: filePath }
       } catch (err) {
         return { ok: false, error: String(err) }
@@ -3780,6 +4010,9 @@ export function setDocsShellHooks(hooks: DocsShellHooks | null): void {
  * (shell) or reveal it in the folder (standalone). Tab-opening failure must
  * not report the write itself as failed — the file is already persisted. */
 function openGeneratedFile(path: string): void {
+  // Headless export has no tab strip and no user: revealing the file in Finder
+  // would be the only visible effect of a run that must stay silent.
+  if (isHeadlessMode()) return
   try {
     if (shellHooks?.openGeneratedPath?.(path)) return
   } catch (err) {
@@ -3963,6 +4196,7 @@ export function buildDocsMenu(): void {
         { label: tm('menuPageSetup'), click: () => sendCommand('page-setup') },
         { label: tm('menuExportPdf'), click: () => sendCommand('export-pdf') },
         { label: tm('menuExportHtml'), click: () => sendCommand('export-html') },
+        { label: tm('menuExportImages'), click: () => sendCommand('export-images') },
         {
           label: tm('menuPrint'),
           accelerator: 'CmdOrCtrl+P',
@@ -4110,11 +4344,80 @@ export function buildDocsMenu(): void {
         },
         { type: 'separator' },
         { label: tm('menuDocsHelp'), enabled: false },
+        { type: 'separator' },
+        aboutMenuItem(appMenuLabels(getUiLang())),
       ],
     },
   ]
 
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+}
+
+// ---- headless export ----
+
+/** hidden export windows: webContents id -> what the renderer must write */
+const headlessExportTargets = new Map<number, HeadlessExportTarget>()
+/** settled by 'docs:headless-export-done' (or by the renderer dying) */
+const headlessExportWaiters = new Map<number, (result: HeadlessExportReport) => void>()
+
+interface HeadlessExportReport {
+  ok: boolean
+  error?: string
+}
+
+/**
+ * Render `input` to `outPath` (as PDF or standalone HTML) with no visible window.
+ *
+ * The window is wired exactly like createDocsWindow's (same preload, sandbox
+ * and `backgroundThrottling: false`) and the document rides the normal
+ * pending-open queue, so the renderer runs its usual load -> paginate ->
+ * export pipeline; only the save dialog is skipped, by pre-authorizing
+ * `outPath` the way a dialog would. Rejects with the renderer's reason when
+ * the export fails or the deadline passes.
+ */
+export async function exportDocsHeadless(
+  input: string,
+  outPath: string,
+  format: HeadlessExportFormat = 'pdf',
+  timeoutMs = 300_000,
+): Promise<void> {
+  const win = new BrowserWindow({
+    show: false,
+    width: 1360,
+    height: 900,
+    webPreferences: {
+      preload: runtime.preloadPath,
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      backgroundThrottling: false,
+    },
+  })
+  const wcId = win.webContents.id
+  pendingWindowOpens.set(wcId, input)
+  headlessExportTargets.set(wcId, { outPath, format })
+  allowPdfWrite(wcId, outPath)
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    const report = await new Promise<HeadlessExportReport>((resolve) => {
+      headlessExportWaiters.set(wcId, resolve)
+      win.webContents.on('render-process-gone', (_event, details) =>
+        resolve({ ok: false, error: `docs renderer stopped (${details.reason})` }),
+      )
+      timer = setTimeout(
+        () => resolve({ ok: false, error: `docs export timed out after ${timeoutMs}ms` }),
+        timeoutMs,
+      )
+      void win.webContents.loadURL(rendererUrl(runtime.rendererUrl, 'docs'))
+    })
+    if (!report.ok) throw new Error(report.error ?? 'docs export failed')
+  } finally {
+    if (timer) clearTimeout(timer)
+    headlessExportWaiters.delete(wcId)
+    headlessExportTargets.delete(wcId)
+    pendingWindowOpens.delete(wcId)
+    if (!win.isDestroyed()) win.destroy()
+  }
 }
 
 // ---- window ----
@@ -4160,11 +4463,7 @@ export function createDocsWindow(openPath?: string): BrowserWindow {
     return { action: 'deny' }
   })
 
-  if (runtime.rendererUrl) {
-    void win.loadURL(runtime.rendererUrl)
-  } else {
-    void win.loadFile(runtime.rendererFile)
-  }
+  void win.loadURL(rendererUrl(runtime.rendererUrl, 'docs'))
   // close guard for standalone-window mode (tab mode goes through the same flow via the shell's tab-manager/window-close path)
   let closeConfirmed = false
   win.on('close', (event) => {
@@ -4383,14 +4682,7 @@ export function createDocsView(openPath?: string): WebContentsView {
 
   // mode=tab: the shell's tab strip owns the traffic lights / caption buttons,
   // so the ribbon must not reserve space for them
-  if (runtime.rendererUrl) {
-    // append via URL so a dev URL that already carries query params stays valid
-    const devUrl = new URL(runtime.rendererUrl)
-    devUrl.searchParams.set('mode', 'tab')
-    void view.webContents.loadURL(devUrl.toString())
-  } else {
-    void view.webContents.loadFile(runtime.rendererFile, { query: { mode: 'tab' } })
-  }
+  void view.webContents.loadURL(rendererUrl(runtime.rendererUrl, 'docs', { mode: 'tab' }))
   // view.webContents becomes undefined after destroy, so grab the id beforehand
   const wcId = view.webContents.id
   view.webContents.once('destroyed', () => {
@@ -4412,6 +4704,7 @@ export function hasDocsWindow(): boolean {
 // ---- standalone lifecycle (apps/docs running on its own) ----
 
 export function startDocsStandalone(): void {
+  registerRendererScheme()
   installNavigationGuard(app)
   installContextMenu(app, () => contextMenuLabels(getUiLang()))
   // dev runs must not share the packaged app's userData (recent files, AI settings)
@@ -4444,6 +4737,7 @@ export function startDocsStandalone(): void {
   registerDocsIpc()
 
   app.whenReady().then(() => {
+    installRendererProtocol({ docs: join(__dirname, '../renderer') })
     setUiLang(normalizeLang(process.env.GENOFFICE_LANG ?? app.getLocale()))
     // packaged builds get the Dock icon from icon.icns; dev shows Electron's default
     if (isDev && process.platform === 'darwin') {

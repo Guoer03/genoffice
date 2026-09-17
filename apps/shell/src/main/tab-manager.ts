@@ -1,4 +1,5 @@
 import { basename } from 'node:path'
+import { realpathSync } from 'node:fs'
 import { BrowserWindow } from 'electron'
 import type { Rectangle, WebContents, WebContentsView } from 'electron'
 
@@ -31,6 +32,7 @@ import {
 } from '../../../pdf/src/main/pdf-main'
 import {
   createSheetsView,
+  nudgeQueuedWorkbook,
   queueWorkbookForView,
   requestSheetsClose,
   setActiveSheetsWebContents,
@@ -80,6 +82,11 @@ export class TabManager {
   private readonly bleedWcIds = new Set<number>()
   /** tabs mid unsaved-changes prompt, so a second close click doesn't stack dialogs */
   private readonly closingIds = new Set<string>()
+  /** Sheets renderer mounted ahead of the next open: parsing its bundle and
+   *  booting Univer is the bulk of a workbook's open time, and the shell hands
+   *  the path over after mount anyway. */
+  private spareSheetsView: WebContentsView | null = null
+  private spareSheetsTimer: ReturnType<typeof setTimeout> | null = null
 
   constructor(
     private readonly shellWindow: BrowserWindow,
@@ -97,6 +104,36 @@ export class TabManager {
       this.layout()
       setImmediate(() => this.layout())
     })
+    shellWindow.webContents.once('did-finish-load', () => this.scheduleSpareSheetsView(1500))
+  }
+
+  private scheduleSpareSheetsView(delayMs: number): void {
+    if (process.env.GENOFFICE_NO_SPARE_VIEW || this.spareSheetsTimer) return
+    this.spareSheetsTimer = setTimeout(() => {
+      this.spareSheetsTimer = null
+      if (this.spareSheetsView || this.shellWindow.isDestroyed()) return
+      const view = createSheetsView({ includeAiHandlers: false })
+      // registering the session made the spare the menu-action target
+      const active = this.tabs.find((t) => t.id === this.activeId)
+      setActiveSheetsWebContents(
+        active?.kind === 'sheets' && active.view ? active.view.webContents : null,
+      )
+      this.shellWindow.contentView.addChildView(view)
+      view.setVisible(false)
+      view.setBounds(this.contentBounds())
+      view.webContents.once('render-process-gone', () => {
+        if (this.spareSheetsView !== view) return
+        this.spareSheetsView = null
+        view.webContents.close()
+      })
+      this.spareSheetsView = view
+    }, delayMs)
+  }
+
+  private takeSpareSheetsView(): WebContentsView | null {
+    const view = this.spareSheetsView
+    this.spareSheetsView = null
+    return view && !view.webContents.isDestroyed() ? view : null
   }
 
   private untitled(kind: TabKind, fallback: string): string {
@@ -146,6 +183,11 @@ export class TabManager {
     if (active?.view) active.view.setBounds(this.contentBounds())
   }
 
+  /** files open in any tab, for the open-documents registry */
+  openFilePaths(): string[] {
+    return this.tabs.flatMap((t) => (t.filePath ? [t.filePath] : []))
+  }
+
   list(): TabSummary[] {
     return this.tabs.map((t) => ({
       id: t.id,
@@ -184,15 +226,22 @@ export class TabManager {
 
   openSheetsTab(openPath?: string, options?: { newBlank?: boolean }): string {
     if (options?.newBlank) setSheetsNewBlank()
-    const view = createSheetsView({ includeAiHandlers: false })
+    const spare = this.takeSpareSheetsView()
+    const view = spare ?? createSheetsView({ includeAiHandlers: false })
     // bind the path to this tab's webContents: a multi-select Open creates
     // several sheets tabs in one loop, so a single global path would be
     // overwritten before the earlier tabs consume it
-    if (openPath) queueWorkbookForView(view.webContents, openPath)
+    if (openPath) {
+      queueWorkbookForView(view.webContents, openPath)
+      if (spare) nudgeQueuedWorkbook(view.webContents)
+    }
     const id = `t${this.nextId++}`
-    this.shellWindow.contentView.addChildView(view)
-    view.setVisible(false)
+    if (!spare) {
+      this.shellWindow.contentView.addChildView(view)
+      view.setVisible(false)
+    }
     this.trackHtmlFullScreen(id, view)
+    this.scheduleSpareSheetsView(3000)
     this.tabs.push({
       id,
       kind: 'sheets',
@@ -410,6 +459,13 @@ export class TabManager {
       .map((t) => ({ id: t.id, webContents: t.view!.webContents }))
   }
 
+  /** all live slides tabs (MCP bridge resolves its new tab's webContents through this) */
+  slidesTabs(): Array<{ id: string; webContents: WebContents }> {
+    return this.tabs
+      .filter((t) => t.kind === 'slides' && t.view)
+      .map((t) => ({ id: t.id, webContents: t.view!.webContents }))
+  }
+
   /** closes whichever tab is currently active; no-op for Home (Cmd+W target) */
   closeActiveTab(): void {
     void this.closeTab(this.activeId)
@@ -478,6 +534,19 @@ export class TabManager {
     }
   }
 
+  /** the editor tab showing this file, whichever module owns it (path compared after resolving links) */
+  findTabByPath(path: string): { id: string; kind: TabKind; webContents: WebContents } | undefined {
+    const wanted = canonicalPath(path)
+    const tab = this.tabs.find(
+      (t) => t.view && t.filePath && !t.present && canonicalPath(t.filePath) === wanted,
+    )
+    return tab?.view ? { id: tab.id, kind: tab.kind, webContents: tab.view.webContents } : undefined
+  }
+
+  webContentsForTab(id: string): WebContents | undefined {
+    return this.tabs.find((t) => t.id === id)?.view?.webContents
+  }
+
   findDocsTabByPath(path: string): string | undefined {
     return this.tabs.find((t) => t.kind === 'docs' && t.filePath === path)?.id
   }
@@ -528,5 +597,13 @@ export class TabManager {
     return tab?.kind === 'pdf' && tab.view
       ? { id: tab.id, webContents: tab.view.webContents, filePath: tab.filePath }
       : undefined
+  }
+}
+
+function canonicalPath(path: string): string {
+  try {
+    return realpathSync.native(path)
+  } catch {
+    return path
   }
 }

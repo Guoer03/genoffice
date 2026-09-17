@@ -376,4 +376,37 @@ describe('protection tag forms', () => {
     const zip = await settingsZip('<w:writeProtection w:recommended="1"></w:writeProtection>')
     expect(await parseWriteProtection(zip)).toMatchObject({ recommended: true })
   })
+
+  it('reads single-quoted protection attributes (some producers emit them)', async () => {
+    const zip = await settingsZip("<w:documentProtection w:edit='readOnly' w:enforcement='1'/>")
+    expect(await parseProtection(zip)).toMatchObject({ edit: 'readOnly', enforced: true })
+    const mixed = await settingsZip(
+      '<w:documentProtection w:edit="comments" w:enforcement=\'on\'/>',
+    )
+    expect(await parseProtection(mixed)).toMatchObject({ edit: 'comments', enforced: true })
+  })
+
+  it('reads single-quoted protection credentials (hash/salt/spin/sid)', async () => {
+    const zip = await settingsZip(
+      "<w:documentProtection w:edit='readOnly' w:enforcement='1' w:hash='abc=' w:salt='def=' w:cryptSpinCount='100000' w:cryptAlgorithmSid='14'/>",
+    )
+    expect(await parseProtection(zip)).toMatchObject({
+      edit: 'readOnly',
+      enforced: true,
+      hash: 'abc=',
+      salt: 'def=',
+      spinCount: 100000,
+      algorithmSid: 14,
+    })
+    const write = await settingsZip(
+      "<w:writeProtection w:recommended='1' w:hash='h=' w:salt='s=' w:cryptSpinCount='50000' w:cryptAlgorithmSid='14'/>",
+    )
+    expect(await parseWriteProtection(write)).toMatchObject({
+      recommended: true,
+      hash: 'h=',
+      salt: 's=',
+      spinCount: 50000,
+      algorithmSid: 14,
+    })
+  })
 })

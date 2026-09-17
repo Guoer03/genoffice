@@ -10,6 +10,7 @@ import { Subject } from 'rxjs'
 
 import {
   buildLazyCellTest,
+  coerceReplaceValue,
   collectJournalMatches,
   coveredByWindow,
   extraComparator,
@@ -784,6 +785,62 @@ describe('installLazyFindBridge', () => {
     expect(mockEnsure).not.toHaveBeenCalled()
     bridge.dispose()
   })
+
+  it('replaceAll on out-of-window hits writes numbers back as numbers', async () => {
+    const harness = facade(state({}))
+    const inner = new FakeInnerModel([])
+    const builtin = { find: vi.fn().mockResolvedValue([inner]), terminate: vi.fn() }
+    harness.providers.add(builtin)
+    const bridge = installLazyFindBridge(harness)
+
+    mockRead.mockResolvedValue(mapped([{ row: 500, column: 3, value: 123 }]))
+
+    const models = await harnessLookup(harness)(query({ findString: '2' }))
+    const model = models[0]!
+    await settle(model)
+    await model.replaceAll('9')
+    // 123 → "193" → numeric 193, so SUM keeps counting it (was text "193" before)
+    expect(harness.setValues).toHaveBeenCalledWith([[{ v: 193 }]])
+    bridge.dispose()
+  })
+
+  it('replaceAll on out-of-window hits writes booleans back as booleans', async () => {
+    const harness = facade(state({}))
+    const inner = new FakeInnerModel([])
+    const builtin = { find: vi.fn().mockResolvedValue([inner]), terminate: vi.fn() }
+    harness.providers.add(builtin)
+    const bridge = installLazyFindBridge(harness)
+
+    mockRead.mockResolvedValue(mapped([{ row: 500, column: 3, value: true }]))
+
+    const models = await harnessLookup(harness)(query({ findString: '1' }))
+    const model = models[0]!
+    await settle(model)
+    await model.replaceAll('0')
+    expect(harness.setValues).toHaveBeenCalledWith([[{ v: false }]])
+    bridge.dispose()
+  })
+})
+
+describe('coerceReplaceValue', () => {
+  it('keeps numbers numeric, falling back to text when the result is not a number', () => {
+    expect(coerceReplaceValue(123, '193')).toBe(193)
+    expect(coerceReplaceValue(123, 'abc')).toBe('abc')
+    expect(coerceReplaceValue(123, '')).toBe('')
+  })
+
+  it('maps 1/0 back to booleans, leaving anything else as text', () => {
+    expect(coerceReplaceValue(true, '0')).toBe(false)
+    expect(coerceReplaceValue(false, '1')).toBe(true)
+    expect(coerceReplaceValue(true, 'TRUE')).toBe(true)
+    expect(coerceReplaceValue(true, 'yes')).toBe('yes')
+  })
+
+  it('leaves strings, nullish and formula-missing raws as text', () => {
+    expect(coerceReplaceValue('abc', 'abd')).toBe('abd')
+    expect(coerceReplaceValue(null, 'x')).toBe('x')
+    expect(coerceReplaceValue(undefined, 'x')).toBe('x')
+  })
 })
 
 /** A model whose disposal is observable, like the built-in SheetFindModel. */
@@ -1026,7 +1083,7 @@ describe('research cursor stability (r167)', () => {
     } as IFindMoveParams) as LazyCellMatch
     expect(walked).toBe(innerList[1])
     // walk steps must not carry stayIfOnMatch: with the selection on another
-    // in-window hit the inner model would re-anchor there forever (bugbot)
+    // in-window hit the inner model would re-anchor there forever
     for (const call of innerMove.mock.calls) {
       expect((call[0] as { stayIfOnMatch?: boolean } | undefined)?.stayIfOnMatch).toBe(false)
     }

@@ -9,8 +9,10 @@ import {
   decodeCsvBuffer,
   isNumericCell,
   parseCsv,
+  resolveImportDelimiter,
   sniffDelimiter,
-} from '../src/gateway/csv-import'
+  splitSepDeclaration,
+} from '@genoffice/xlsx-gateway/gateway/csv-import'
 
 describe('decodeCsvBuffer', () => {
   const rows = '城市,人口\n东京,37\n'
@@ -73,6 +75,33 @@ function encodeWith(text: string, charset: string): Buffer {
 const gbkBytes = (text: string): Buffer => encodeWith(text, 'gb18030')
 const shiftJisBytes = (text: string): Buffer => encodeWith(text, 'shift_jis')
 
+describe('sep= declaration', () => {
+  it('names the delimiter and is never a data row', () => {
+    const text = 'sep=;\nname;qty\nApple;3\n'
+    expect(splitSepDeclaration(text)).toEqual({ text: 'name;qty\nApple;3\n', delimiter: ';' })
+    expect(sniffDelimiter(text)).toBe(';')
+    expect(parseCsv(text)).toEqual([
+      ['name', 'qty'],
+      ['Apple', '3'],
+    ])
+    expect(sniffDelimiter('\ufeffsep=\t\na\tb\n')).toBe('\t')
+    expect(splitSepDeclaration('separator,x\n1,2\n').delimiter).toBeUndefined()
+  })
+
+  it('overrides the prose guard on the import path', () => {
+    const prose = 'sep=;\nnotes\nhello; world\nplain text\n'
+    expect(resolveImportDelimiter(prose)).toBe(';')
+    expect(resolveImportDelimiter(prose.slice('sep=;\n'.length))).toBe(',')
+  })
+
+  it('is stripped by the workbook import too', async () => {
+    const zip = await JSZip.loadAsync(await csvToXlsxBuffer('sep=;\na;b\n1;2\n'))
+    const sheet = await zip.file('xl/worksheets/sheet1.xml')!.async('string')
+    expect(sheet).not.toContain('sep=')
+    expect(sheet).toContain('<c r="B2"><v>2</v></c>')
+  })
+})
+
 describe('parseCsv', () => {
   it('handles quotes, embedded delimiters, escaped quotes, and CRLF', () => {
     const rows = parseCsv('a,"b,1","say ""hi""",c\r\nd,,e,')
@@ -122,6 +151,37 @@ describe('parseCsv', () => {
       ['a', 'b'],
       ['1', '2'],
     ])
+  })
+})
+
+describe('resolveImportDelimiter', () => {
+  it('keeps single-column prose with stray semicolons in one column', () => {
+    const notes = 'Notes\nhello; world\nfoo; bar; baz\n'
+    expect(sniffDelimiter(notes)).toBe(';')
+    expect(resolveImportDelimiter(notes)).toBe(',')
+    expect(parseCsv(notes, resolveImportDelimiter(notes))).toEqual([
+      ['Notes'],
+      ['hello; world'],
+      ['foo; bar; baz'],
+    ])
+  })
+
+  it('keeps genuine semicolon tables split', () => {
+    expect(resolveImportDelimiter('a;b;c\n1;2;3')).toBe(';')
+    expect(resolveImportDelimiter('a;b\nc')).toBe(';')
+  })
+
+  it('keeps a comma-free table split when a title row precedes uniform body rows', () => {
+    expect(resolveImportDelimiter('Sales 2026\na;b;c\n1;2;3\n4;5;6')).toBe(';')
+    expect(resolveImportDelimiter('Report\n\na\tb\n1\t2\n3\t4\n')).toBe('\t')
+    // one wide row among prose lines is not a table
+    expect(resolveImportDelimiter('Notes\nhello; world\nfoo bar\nbaz qux\nx; y')).toBe(',')
+  })
+
+  it('keeps the sniffed delimiter when comma is equally ragged', () => {
+    // header opens single-field under ';' but commas appear irregularly too:
+    // forcing comma would trade one mis-split for another, so stay put
+    expect(resolveImportDelimiter('Notes\nhello; world; x, y\nfoo;bar')).toBe(';')
   })
 })
 

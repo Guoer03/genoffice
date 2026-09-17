@@ -109,7 +109,7 @@ describe('streamForProvider: temperature policy', () => {
 describe('streamForProvider: empty SSE streams surface as errors', () => {
   // A 200 SSE stream with zero text and zero tool calls previously dissolved
   // into an empty "successful" turn; the UI then showed a generic "no content"
-  // message with no diagnostics (alpha rows 36/37)
+  // message with no diagnostics
   it.each([
     ['anthropic', 'claude-sonnet-5', /Claude returned no content/],
     ['gemini', 'gemini-2.5-flash', /Gemini returned no content/],
@@ -823,6 +823,53 @@ describe('streamForProvider: openai-compatible', () => {
   })
 })
 
+describe('streamForProvider: opencode', () => {
+  it('opencode: sends the renderer session id as x-opencode-session on every route', async () => {
+    for (const [provider, model] of [
+      ['opencode-go', 'kimi-k2.7-code'],
+      ['opencode-go', 'minimax-m3'],
+      ['opencode-zen', 'claude-sonnet-5'],
+      ['opencode-zen', 'gemini-3.7-flash'],
+    ] as const) {
+      const fetchMock = vi.fn().mockResolvedValue(okResponse(sseStream([])))
+      vi.stubGlobal('fetch', fetchMock)
+      const { cb } = collector()
+      await streamForProvider(provider, { apiKey: 'k', model }, 'sys', [], [], 100, {
+        ...cb,
+        sessionId: 'tab-42',
+      }).catch(() => {})
+      const headers = fetchMock.mock.calls[0]![1].headers as Record<string, string>
+      expect(headers['x-opencode-session']).toBe('tab-42')
+    }
+  })
+
+  it('opencode: a turn without a renderer session id still carries a session header', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(okResponse(sseStream([])))
+    vi.stubGlobal('fetch', fetchMock)
+    await streamForProvider(
+      'opencode-go',
+      { apiKey: 'k', model: 'kimi-k2.7-code' },
+      'sys',
+      [],
+      [],
+      100,
+      collector().cb,
+    ).catch(() => {})
+    const headers = fetchMock.mock.calls[0]![1].headers as Record<string, string>
+    expect(headers['x-opencode-session']).toMatch(/^[0-9a-f-]{36}$/)
+  })
+
+  it('never sends x-opencode-session to other gateways', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(okResponse(sseStream([])))
+    vi.stubGlobal('fetch', fetchMock)
+    await streamForProvider('kimi', { apiKey: 'k', model: 'kimi-k3' }, 'sys', [], [], 100, {
+      ...collector().cb,
+      sessionId: 'tab-42',
+    }).catch(() => {})
+    const headers = fetchMock.mock.calls[0]![1].headers as Record<string, string>
+    expect(headers['x-opencode-session']).toBeUndefined()
+  })
+})
 describe('streamForProvider: 200 + non-stream JSON instead of SSE', () => {
   const creditsNotice =
     'Your Genspark credits have been exhausted. Please visit https://www.genspark.ai/pricing to purchase more credits.'

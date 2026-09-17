@@ -134,7 +134,6 @@ export const fr = {
   appMoreItems: '+{count} éléments…',
   appTruncationNote: '{shown} premiers sur {total}',
   appGoToButtonTitle: 'Atteindre (⌘G)',
-  appNameBoxTitle: 'Zone Nom — saisissez une adresse ou un nom, puis appuyez sur Entrée',
   appPivotChartHintIn:
     'Créer un graphique croisé dynamique à partir du tableau croisé dynamique actuel',
   appPivotChartHintOut:
@@ -580,6 +579,12 @@ export const fr = {
   appPdfCanceled: 'Export PDF annulé.',
   appPdfExported: '{path} exporté.',
   appPdfExportFailed: "Impossible d'exporter le PDF.",
+  appPrintPreparing: 'Préparation de l’impression…',
+  appPrintSent: 'Envoyé à l’imprimante.',
+  appPrintCanceled: 'Impression annulée.',
+  appPrintFailed: 'Impression impossible.',
+  appPrintNeedsFullLoad:
+    'L’impression nécessite le chargement complet du classeur ; attendez la fin du chargement.',
   appCsvExportNeedsFullLoad:
     "L'export CSV nécessite un classeur entièrement chargé — attendez la fin du chargement.",
   appCsvExportTooLarge: 'La feuille est trop grande pour être exportée en CSV.',
@@ -1375,6 +1380,8 @@ export const fr = {
   appFormatMenu: 'Format',
   appRowHeight: 'Hauteur de ligne',
   appColWidth: 'Largeur de colonne',
+  appAutoFitRowHeight: 'Ajuster la hauteur de ligne',
+  appAutoFitColWidth: 'Ajuster la largeur de colonne',
   appRowHeightLabel: 'Hauteur de ligne (points)',
   appColWidthLabel: 'Largeur de colonne (caractères)',
   appDeleteRow: 'Supprimer la ligne',

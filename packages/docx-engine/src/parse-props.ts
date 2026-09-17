@@ -34,11 +34,13 @@ import type {
   ThemeFonts,
 } from './types'
 import { resolveThemeColor } from './theme'
+import { isOn } from './checkbox-control'
 
 /** No run un-hides itself and nothing anchors here (bookmarks, comments, sectPr,
  *  drawings, numbering): safe to collapse a style-vanished paragraph entirely */
 export function staysVanished(xml: string): boolean {
-  if (/<w:vanish\s[^>]*w:val="(?:0|false|off)"/.test(xml)) return false
+  if (/<w:vanish\s[^>]*w:val=(?:"(?:0|false|none|off)"|'(?:0|false|none|off)')/i.test(xml))
+    return false
   return !/<w:(?:drawing|pict|object|sectPr|bookmarkStart|commentRangeStart|commentRangeEnd|numPr)[\s/>]/.test(
     xml,
   )
@@ -109,8 +111,10 @@ export function rawPPrOf(xml: string): string | undefined {
   // the paragraph's own pPr must be the first child of w:p; a later match
   // would belong to nested content (textbox paragraphs)
   const openEnd = xml.indexOf('>') + 1
-  if (openEnd === 0 || !xml.startsWith('<w:pPr', openEnd)) return undefined
-  const start = openEnd
+  if (openEnd === 0) return undefined
+  // pretty-printed sources put whitespace between <w:p> and its pPr
+  const start = openEnd + (/^\s*/.exec(xml.slice(openEnd))?.[0].length ?? 0)
+  if (!xml.startsWith('<w:pPr', start)) return undefined
   const re = /<w:pPr(?=[\s/>])|<\/w:pPr>/g
   re.lastIndex = start
   let depth = 0
@@ -345,6 +349,9 @@ export function ptabDisplayStops(pNode: XNode): import('./types').TabStop[] {
 export const SIMPLE_INLINE_FIELD_RE =
   /^\s*(DATE|TIME|CREATEDATE|SAVEDATE|NUMPAGES|FILENAME|AUTHOR|PAGE)\b/
 
+/** Zotero Word fields. Their cached result is the visible citation/bibliography text. */
+export const ZOTERO_INLINE_FIELD_RE = /^\s*(?:ADDIN\s+)?(?:ZOTERO_|CSL_)(?:ITEM|BIBL|TEMP)\b/i
+
 /** HYPERLINK "url" (optional \o "tip"): the only field form folded into an editable link run;
  * any other switch (\l bookmark, \t frame...) keeps the protected-passthrough path */
 export function convertibleHyperlink(instr: string): { href: string; tooltip?: string } | null {
@@ -366,9 +373,19 @@ export function onlyOleFields(xml: string): boolean {
 }
 
 export function onlyXeFields(xml: string): boolean {
-  if (xml.includes('<w:fldSimple')) return false
+  // fldSimple instructions fold too (extractRuns turns XE / REF / simple
+  // fields into the same runs as the fldChar form); one without w:instr can't
+  const simple = [...xml.matchAll(/<w:fldSimple\b([^>]*)>/g)].map(
+    (m) => /\bw:instr="([^"]*)"/.exec(m[1])?.[1],
+  )
+  if (simple.some((instr) => instr === undefined)) return false
   const instrs = xml.match(/<w:instrText[^>]*>[\s\S]*?<\/w:instrText>/g) ?? []
-  if (instrs.length === 0) return false
+  if (instrs.length === 0 && simple.length === 0) return false
+  const simpleOk = simple.every((raw) => {
+    const text = decodeEntities(raw!)
+    return /^\s*XE[\s"]/.test(text) || /^\s*REF\s/.test(text) || SIMPLE_INLINE_FIELD_RE.test(text)
+  })
+  if (!simpleOk) return false
   let checkboxInstrs = 0
   const ok = instrs.every((fragment) => {
     const text = decodeEntities(fragment.replace(/<[^>]+>/g, ''))
@@ -379,6 +396,7 @@ export function onlyXeFields(xml: string): boolean {
     return (
       /^\s*XE[\s"]/.test(text) ||
       /^\s*REF\s/.test(text) ||
+      ZOTERO_INLINE_FIELD_RE.test(text) ||
       SIMPLE_INLINE_FIELD_RE.test(text) ||
       convertibleHyperlink(text) !== null
     )
@@ -401,7 +419,7 @@ export function checkboxStateOf(beginRun: XNode | null): { checked: boolean } | 
   const state = findChild(box, 'w:checked') ?? findChild(box, 'w:default')
   if (!state) return { checked: false }
   const val = attrsOf(state)['w:val']
-  return { checked: val === undefined || val === '1' || val === 'true' || val === 'on' }
+  return { checked: isOn(val) }
 }
 
 /**
@@ -549,11 +567,15 @@ export function resolveCharIndents(
  * (pPr/w:rPr), else the last run's rPr — those runs are all empty and get
  * dropped, but Word still sizes the empty line by them (1pt spacer lines).
  */
-export function emptyParaSizeHalfPoints(pNode: XNode, pPr: XNode | undefined): number | undefined {
+export function emptyParaSizeHalfPoints(
+  pNode: XNode,
+  pPr: XNode | undefined,
+  markOnly = false,
+): number | undefined {
   let sz = pPr
     ? attrsOf(findChild(findChild(pPr, 'w:rPr') ?? {}, 'w:sz') ?? {})['w:val']
     : undefined
-  if (!sz) {
+  if (!sz && !markOnly) {
     for (const r of findChildren(pNode, 'w:r')) {
       const v = attrsOf(findChild(findChild(r, 'w:rPr') ?? {}, 'w:sz') ?? {})['w:val']
       if (v) sz = v
@@ -572,6 +594,7 @@ export function emptyParaMarkFont(
   pNode: XNode,
   pPr: XNode | undefined,
   themeFonts?: ThemeFonts | null,
+  markOnly = false,
 ): string | undefined {
   const pick = (rPr: XNode | undefined): string | undefined => {
     const a = attrsOf(findChild(rPr ?? {}, 'w:rFonts') ?? {})
@@ -582,13 +605,24 @@ export function emptyParaMarkFont(
     return rf.ascii ?? rf.hAnsi
   }
   let font = pPr ? pick(findChild(pPr, 'w:rPr')) : undefined
-  if (!font) {
+  if (!font && !markOnly) {
     for (const r of findChildren(pNode, 'w:r')) {
       const v = pick(findChild(r, 'w:rPr'))
       if (v) font = v
     }
   }
   return font
+}
+
+const SPACE_ONLY_RE = /^[ \u00a0\u3000]+$/
+
+/**
+ * Space-only runs never size a line (Word probe 2026-09-11: a 2pt/4pt/17pt
+ * space paragraph lays out exactly like an 11pt text line, sized by the mark),
+ * so such a paragraph takes the empty-paragraph mark rules, mark rPr only.
+ */
+export function spaceOnlyRuns(runs: ReadonlyArray<{ text: string }>): boolean {
+  return runs.length > 0 && runs.every((r) => SPACE_ONLY_RE.test(r.text))
 }
 
 export const IMAGE_RUN_CHILDREN = new Set([
@@ -614,6 +648,31 @@ export function splitImageRun(rNode: XNode): XNode[] {
   }
   if (current.length > (rPr ? 1 : 0)) parts.push(current)
   return parts.map((children) => ({ 'w:r': children, ...(attrs ? { ':@': attrs } : {}) }))
+}
+
+/**
+ * A run mixing w:sym with other text keeps each symbol in a run of its own
+ * (rPr copied), so the glyph renders in its symbol font: Run.sym is singular.
+ */
+export function splitSymRun(rNode: XNode): XNode[] {
+  const kids = childrenOf(rNode).filter((c) => nameOf(c) !== 'w:rPr')
+  if (kids.length < 2 || !kids.some((c) => nameOf(c) === 'w:sym')) return [rNode]
+  const attrs = rNode[':@']
+  const rPr = findChild(rNode, 'w:rPr')
+  const parts: XNode[][] = []
+  let current: XNode[] = []
+  for (const child of kids) {
+    if (nameOf(child) === 'w:sym') {
+      if (current.length > 0) parts.push(current)
+      parts.push([child])
+      current = []
+    } else current.push(child)
+  }
+  if (current.length > 0) parts.push(current)
+  return parts.map((children) => ({
+    'w:r': rPr ? [rPr, ...children] : children,
+    ...(attrs ? { ':@': attrs } : {}),
+  }))
 }
 
 /** exact <w:ruby> fragments in document order (w:ruby has no attributes and cannot nest) */
@@ -792,7 +851,7 @@ export function themedRFonts(
  *  w:document/w:hdr instead of per element; Word honors the inheritance) */
 export function partXmlSpacePreserve(partXml: string, rootTag: string): boolean {
   const open = new RegExp(`<${rootTag}(\\s[^>]*)?>`).exec(partXml)?.[1] ?? ''
-  return /\sxml:space="preserve"/.test(open)
+  return /\sxml:space=(?:"preserve"|'preserve')/.test(open)
 }
 
 export function mergeRuns(runs: Run[]): Run[] {
@@ -810,7 +869,9 @@ function sameStyle(a: Run, b: Run): boolean {
   if (a.noteRef || b.noteRef || a.xeTerm !== undefined || b.xeTerm !== undefined) return false
   if (a.refField !== undefined || b.refField !== undefined) return false
   if (a.instrField !== undefined || b.instrField !== undefined) return false
+  if (a.sdtCheckboxXml !== undefined || b.sdtCheckboxXml !== undefined) return false
   if (a.math || b.math) return false
+  if (a.sym || b.sym) return false
   if (a.ruby || b.ruby) return false
   if (a.image || b.image) return false
   return (
@@ -858,17 +919,29 @@ function blendHex(fg: string, bg: string, ratio: number): string {
  * as the pattern color blended over the fill at the pattern's ink coverage —
  * Word's actual dot/stripe raster is out of scope for cell backgrounds.
  */
-export function shdDisplayFill(shd: XNode | undefined): string | undefined {
+export function shdDisplayFill(
+  shd: XNode | undefined,
+  theme?: ThemeColors | null,
+): string | undefined {
   if (!shd) return undefined
   const a = attrsOf(shd)
   const hex = (v: string | undefined) => {
     const s = v ? stripHash(v) : undefined
     return s && /^[0-9a-fA-F]{6}$/.test(s) ? s : undefined
   }
-  const fill = a['w:fill'] === 'auto' ? undefined : hex(a['w:fill'])
+  // Word re-resolves w:themeFill against the theme; the w:fill hex is only a cache
+  const themed = (slot: string, tint: string, shade: string): string | undefined =>
+    theme && a[slot]
+      ? (resolveThemeColor(a[slot], theme, a[tint], a[shade]) ?? undefined)
+      : undefined
+  const fill =
+    themed('w:themeFill', 'w:themeFillTint', 'w:themeFillShade') ??
+    (a['w:fill'] === 'auto' ? undefined : hex(a['w:fill']))
   const val = a['w:val'] ?? 'clear'
   if (val === 'clear' || val === 'nil') return fill
-  const ink = a['w:color'] === 'auto' ? undefined : hex(a['w:color'])
+  const ink =
+    themed('w:themeColor', 'w:themeTint', 'w:themeShade') ??
+    (a['w:color'] === 'auto' ? undefined : hex(a['w:color']))
   if (val === 'solid') return ink ?? '000000'
   let ratio: number | undefined
   if (val.startsWith('pct')) {
@@ -879,6 +952,15 @@ export function shdDisplayFill(shd: XNode | undefined): string | undefined {
   }
   if (ratio === undefined) return fill
   return blendHex(ink ?? '000000', fill ?? 'FFFFFF', ratio)
+}
+
+/** w:tblStyleRowBandSize of a tblPr (instance or style level); undefined when absent or not positive */
+export function rowBandSizeOf(tblPr: XNode | undefined): number | undefined {
+  const n = parseInt(
+    attrsOf(findChild(tblPr ?? {}, 'w:tblStyleRowBandSize') ?? {})['w:val'] ?? '',
+    10,
+  )
+  return n > 0 ? n : undefined
 }
 
 export function tableLookOf(tblPr: XNode | undefined): NonNullable<TableModel['tableLook']> {
@@ -967,6 +1049,8 @@ export function paraBorderSidesOf(
     else if (a['w:color'] && a['w:color'] !== 'auto') line.color = stripHash(a['w:color'])
     const sz = parseInt(a['w:sz'] ?? '', 10)
     if (Number.isFinite(sz) && sz > 0) line.szPt = sz / 8
+    const space = parseInt(a['w:space'] ?? '', 10)
+    if (Number.isFinite(space) && space > 0) line.spacePt = space
     sides[ch] = line
   }
   return Object.keys(sides).length > 0 ? sides : undefined
@@ -988,7 +1072,8 @@ export function paraBordersOf(
       continue
     }
     borders += ch
-    if (line.color !== undefined || line.szPt !== undefined) lines[ch] = line
+    if (line.color !== undefined || line.szPt !== undefined || line.spacePt !== undefined)
+      lines[ch] = line
   }
   if (borders) out.borders = borders
   if (borders && Object.keys(lines).length > 0) out.borderLines = lines

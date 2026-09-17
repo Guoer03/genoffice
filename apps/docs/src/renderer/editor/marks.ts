@@ -6,9 +6,22 @@ import { cssCsFontFamily, cssRunFontFamily } from '../line-metrics'
 import { isEastAsianFontName } from '../font-list'
 import { t } from '../i18n/locale'
 import { dkBackground } from './dark-page'
+import { runBorderDecls } from './run-border'
 import { fillInk } from './shading-ink'
 import { textColorDecls } from './text-color'
-import {} from '@genoffice/docx-engine'
+import { parseTextOutlineAttr, textOutlineDecl } from './text-outline'
+import {
+  charScaleXDecls,
+  doubleStrikeDecl,
+  glowDecl,
+  paperColorEffect,
+  parseGlowAttr,
+  parseTextEffectAttr,
+  positionDecl,
+  textEffectDecls,
+} from './text-effects'
+import { symbolGlyph, symbolPuaChar } from '@genoffice/docx-engine'
+import { symbolFontCovers } from '../font-check'
 
 /**
  * Custom schema mirroring the docx-engine Block model 1:1.
@@ -125,7 +138,7 @@ export const LinkMark = Mark.create({
         href: mark.attrs.href,
         class: 'doc-link',
         // Word parity: hovering a link shows its target even without a
-        // stored tooltip (alpha ledger r164 — links were uninspectable)
+        // stored tooltip (links were uninspectable)
         title: mark.attrs.tooltip ? String(mark.attrs.tooltip) : String(mark.attrs.href ?? ''),
       },
       0,
@@ -237,7 +250,8 @@ export const HIGHLIGHT_CSS: Record<string, string> = {
 export const RefFieldMark = Mark.create({
   name: 'refField',
   addAttributes() {
-    return { name: { default: '' } }
+    // instr: the original instruction with its switches (null = plain REF name \h); dirty: Word recomputes on open
+    return { name: { default: '' }, instr: { default: null }, dirty: { default: false } }
   },
   parseHTML() {
     return [{ tag: 'span[data-ref-field]' }]
@@ -249,6 +263,40 @@ export const RefFieldMark = Mark.create({
         'data-ref-field': String(mark.attrs.name),
         class: 'doc-ref-field',
         title: t('editorCrossReference', { name: String(mark.attrs.name) }),
+      },
+      0,
+    ]
+  },
+})
+
+/** w:sym glyph: the text is the display character, the attrs the font + hex
+ *  char the run regenerates with; non-inclusive so typed text stays plain */
+export const SymMark = Mark.create({
+  name: 'docSym',
+  inclusive: false,
+  // innermost mark: an undecoded glyph exists only in its symbol font, which
+  // must win over the run's own font-family (document data, hence inline)
+  priority: 90,
+  addAttributes() {
+    return { font: { default: '' }, char: { default: '' } }
+  },
+  parseHTML() {
+    return [{ tag: 'span[data-sym-char]' }]
+  },
+  renderHTML({ mark }) {
+    const font = String(mark.attrs.font)
+    const char = String(mark.attrs.char)
+    const glyph = symbolGlyph(font, char)
+    const pua = symbolPuaChar(char)
+    // the font draws its own glyph when installed (runsToInline then feeds it the
+    // private-use code); an undecoded glyph exists only in that font either way
+    const ownFont = !!font && pua !== null && (glyph === pua || symbolFontCovers(font, pua))
+    return [
+      'span',
+      {
+        'data-sym-font': font,
+        'data-sym-char': char,
+        ...(ownFont ? { style: `font-family:"${font.replace(/"/g, '')}"` } : {}),
       },
       0,
     ]
@@ -338,21 +386,48 @@ export const InstrFieldMark = Mark.create({
   inclusive: false,
   addAttributes() {
     // beginXml: preserved w:fldChar begin run (form-field ffData) for verbatim write-back
-    return { instr: { default: '' }, beginXml: { default: null } }
+    // fieldId/fieldPart are runtime-only and keep cross-paragraph Zotero fields addressable.
+    return {
+      instr: { default: '' },
+      beginXml: { default: null },
+      dirty: { default: false },
+      fieldId: { default: null, rendered: false },
+      fieldPart: { default: null, rendered: false },
+    }
   },
   parseHTML() {
     return [{ tag: 'span[data-instr-field]' }]
   },
   renderHTML({ mark }) {
+    const instruction = String(mark.attrs.instr)
+    const zoteroClass = /^\s*(?:ADDIN\s+)?(?:ZOTERO_|CSL_)/i.test(instruction)
+      ? ' zotero-ref-field'
+      : ''
     return [
       'span',
       {
-        'data-instr-field': String(mark.attrs.instr),
-        class: 'doc-ref-field',
-        title: t('editorFieldHint', { instr: String(mark.attrs.instr) }),
+        'data-instr-field': instruction,
+        class: `doc-ref-field${zoteroClass}`,
+        title: t('editorFieldHint', { instr: instruction }),
       },
       0,
     ]
+  },
+})
+
+/** Content-control checkbox (w14:checkbox): the text is the box glyph, `sdtPr` the control's
+ * properties written back around it. Clicking the glyph toggles it (checkbox-toggle.ts). */
+export const CtrlCheckboxMark = Mark.create({
+  name: 'ctrlCheckbox',
+  inclusive: false,
+  addAttributes() {
+    return { sdtPr: { default: '' } }
+  },
+  parseHTML() {
+    return [{ tag: 'span[data-ctrl-checkbox]' }]
+  },
+  renderHTML() {
+    return ['span', { 'data-ctrl-checkbox': '', class: 'doc-checkbox-control' }, 0]
   },
 })
 
@@ -394,7 +469,7 @@ export function fontAttrsFromFamilyChain(chain: string | undefined): Record<stri
  * data-doc-style JSON payload (the CSS in renderHTML is lossy — highlight,
  * shading, caps, emphasis and dual-font slots don't all survive the
  * style-heuristic parse below). rawRPr/cs stay out: they are rendered:false
- * save-side pass-throughs, deliberately kept off the DOM. (alpha ledger r117)
+ * save-side pass-throughs, deliberately kept off the DOM.
  */
 const CLIPBOARD_TEXT_STYLE_TYPES: Record<string, 'string' | 'number' | 'boolean'> = {
   color: 'string',
@@ -405,9 +480,16 @@ const CLIPBOARD_TEXT_STYLE_TYPES: Record<string, 'string' | 'number' | 'boolean'
   csFont: 'string',
   charSpacingTwips: 'number',
   charScaleEm: 'number',
+  charScaleX: 'string',
   kern: 'boolean',
   highlight: 'string',
   shading: 'string',
+  textOutline: 'string',
+  textEffect: 'string',
+  dstrike: 'boolean',
+  glow: 'string',
+  positionHalfPoints: 'number',
+  bdr: 'string',
   vertAlign: 'string',
   em: 'string',
   boldOff: 'boolean',
@@ -496,11 +578,27 @@ export const TextStyleMark = Mark.create({
       charSpacingTwips: { default: null as number | null },
       // letter spacing (em, negative = condensed) converted from w:w scaling; precomputed by convert per run text
       charScaleEm: { default: null as number | null },
+      // w:w on a whitespace-free run as JSON {s,gapEm}: real glyph compression (text-effects.ts)
+      charScaleX: { default: null as string | null },
       // w:kern resolved against the run size (Word kerns only when asked); null = document default
       kern: { default: null as boolean | null },
       highlight: { default: null as string | null },
       // run shading fill, hex without '#' (w:shd w:fill)
       shading: { default: null as string | null },
+      // pattern/theme-resolved shading colour (display only; the raw fill is what saves)
+      shadingDisplay: { default: null as string | null, rendered: false },
+      // w14:textOutline as JSON {color,widthPt,alpha}; saving is kept faithful by rawRPr
+      textOutline: { default: null as string | null },
+      // w:outline/w:emboss/w:imprint/w:shadow; saving is kept faithful by rawRPr
+      textEffect: { default: null as string | null },
+      // w:dstrike; saving is kept faithful by rawRPr
+      dstrike: { default: null as boolean | null },
+      // w14:glow as JSON {color,radiusPt,alpha}; saving is kept faithful by rawRPr
+      glow: { default: null as string | null },
+      // w:position baseline shift (half-points); saving is kept faithful by rawRPr
+      positionHalfPoints: { default: null as number | null },
+      // character border (w:bdr) as JSON {val,sz,color,space}; saving is kept faithful by rawRPr
+      bdr: { default: null as string | null },
       vertAlign: { default: null as 'superscript' | 'subscript' | null },
       // East Asian emphasis mark (w:em val); saving is kept faithful by rawRPr
       em: { default: null as string | null },
@@ -545,8 +643,10 @@ export const TextStyleMark = Mark.create({
   },
   renderHTML({ mark }) {
     const styles: string[] = []
+    const effect = parseTextEffectAttr(mark.attrs.textEffect)
     // authored colors stay the declaration; the --dk-* twins feed the dark page (dark-page.ts)
-    if (mark.attrs.color) styles.push(...textColorDecls(String(mark.attrs.color)))
+    if (mark.attrs.color && !paperColorEffect(effect))
+      styles.push(...textColorDecls(String(mark.attrs.color)))
     if (mark.attrs.sizeHalfPoints)
       styles.push(`font-size:${Number(mark.attrs.sizeHalfPoints) / 2}pt`)
     if (mark.attrs.font || mark.attrs.fontAscii || mark.attrs.csFont) {
@@ -568,23 +668,38 @@ export const TextStyleMark = Mark.create({
     else if (scaleEm) styles.push(`letter-spacing:${scaleEm}em`)
     else if (mark.attrs.charSpacingTwips === 0) styles.push('letter-spacing:0')
     if (mark.attrs.kern != null) styles.push(`font-kerning:${mark.attrs.kern ? 'normal' : 'none'}`)
+    const shading = (mark.attrs.shadingDisplay ?? mark.attrs.shading) as string | null
     // shading first: when both are set the later highlight declaration wins (Word behavior)
-    if (mark.attrs.shading) styles.push(`background-color:#${mark.attrs.shading}`)
+    if (shading) styles.push(`background-color:#${shading}`)
     if (mark.attrs.highlight) {
       styles.push(
         `background-color:${HIGHLIGHT_CSS[mark.attrs.highlight as string] ?? mark.attrs.highlight}`,
       )
     }
-    if (mark.attrs.highlight || mark.attrs.shading) {
+    if (mark.attrs.highlight || shading) {
       // twin of whichever background wins (highlight over shading)
       styles.push(
         dkBackground(
           mark.attrs.highlight
             ? (HIGHLIGHT_CSS[mark.attrs.highlight as string] ?? String(mark.attrs.highlight))
-            : `#${mark.attrs.shading}`,
+            : `#${shading}`,
         ),
       )
     }
+    if (mark.attrs.textOutline) {
+      const outline = parseTextOutlineAttr(String(mark.attrs.textOutline))
+      if (outline) styles.push(textOutlineDecl(outline))
+    }
+    if (effect) styles.push(...textEffectDecls(effect))
+    if (mark.attrs.dstrike) styles.push(doubleStrikeDecl())
+    if (mark.attrs.glow) {
+      const glow = parseGlowAttr(String(mark.attrs.glow))
+      if (glow) styles.push(glowDecl(glow))
+    }
+    if (mark.attrs.positionHalfPoints)
+      styles.push(positionDecl(Number(mark.attrs.positionHalfPoints)))
+    if (mark.attrs.charScaleX) styles.push(...charScaleXDecls(String(mark.attrs.charScaleX)))
+    if (mark.attrs.bdr) styles.push(...runBorderDecls(String(mark.attrs.bdr)))
     if (mark.attrs.vertAlign === 'superscript') styles.push('vertical-align:super;font-size:0.75em')
     if (mark.attrs.vertAlign === 'subscript') styles.push('vertical-align:sub;font-size:0.75em')
     if (mark.attrs.em) {
@@ -615,7 +730,7 @@ export const TextStyleMark = Mark.create({
     }
     if (mark.attrs.styleId) attrs['data-style'] = String(mark.attrs.styleId)
     {
-      const ink = fillInk(mark.attrs.shading)
+      const ink = fillInk(shading)
       if (ink) attrs['data-ink'] = ink
     }
     return ['span', attrs, 0]

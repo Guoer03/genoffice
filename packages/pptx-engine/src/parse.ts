@@ -5,6 +5,7 @@
  * (one-to-one in top-level shape order). Phase 1 supports: text boxes / pictures /
  * simple shapes; everything else → passthrough.
  */
+import { namedActionOf } from './named-action'
 import { XMLParser } from 'fast-xml-parser'
 import { layoutHierTree, parseHierConstraints } from './dgm-hier'
 import { scanSlide, type SpElement } from './scan'
@@ -35,6 +36,7 @@ import {
   type LevelTextStyle,
 } from './placeholder'
 import type {
+  RunStyleSource,
   Slide,
   SlideElement,
   TextElement,
@@ -276,6 +278,39 @@ function isHiddenElement(node: any, tagName: string): boolean {
   return hidden === '1' || hidden === 'true'
 }
 
+/** A paragraph-level <mc:AlternateContent> whose Choice is an a14:m equation. */
+const MATH_AC_RE =
+  /<mc:AlternateContent\b[^>]*>\s*<mc:Choice\b[^>]*>\s*<a14:m\b[\s\S]*?<\/mc:AlternateContent>/g
+
+/**
+ * Equations are paragraph children fast-xml-parser would file outside the run
+ * list (losing their position and, on rebuild, the block itself). They become a
+ * run carrying the block verbatim (base64 in an attribute, TextRun.rawXml after
+ * parseRun) with the Fallback's text — or the m:t tokens — as its display text.
+ */
+function mathBlockAsRun(block: string): string {
+  const fallback = /<mc:Fallback\b[^>]*>([\s\S]*?)<\/mc:Fallback>/.exec(block)?.[1] ?? ''
+  const texts = (m: string) =>
+    [...m.matchAll(/<(?:a|m):t(?:\s[^>]*)?>([\s\S]*?)<\/(?:a|m):t>/g)].map((x) => x[1]!).join('')
+  const text = texts(fallback) || texts(block)
+  return `<a:r gxRaw="${utf8ToBase64(block)}"><a:rPr/><a:t>${text}</a:t></a:r>`
+}
+
+function utf8ToBase64(s: string): string {
+  const bytes = new TextEncoder().encode(s)
+  let bin = ''
+  for (let i = 0; i < bytes.length; i += 0x8000)
+    bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+  return btoa(bin)
+}
+
+function base64ToUtf8(b64: string): string {
+  const bin = atob(b64)
+  const bytes = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+  return new TextDecoder().decode(bytes)
+}
+
 function parseShapeFragment(
   sp: SpElement,
   fragXml: string,
@@ -290,6 +325,7 @@ function parseShapeFragment(
   // and rewriting the tag (attributes kept, so @_type survives for run.field) keeps
   // fields in document order instead of being appended after all plain runs.
   const semanticXml = fragXml
+    .replace(MATH_AC_RE, mathBlockAsRun)
     .replace(/<a:br\b[^>]*\/>|<a:br\b[\s\S]*?<\/a:br>/g, '<a:r><a:t>\n</a:t></a:r>')
     .replace(/<a:fld\b/g, '<a:r')
     .replace(/<\/a:fld>/g, '</a:r>')
@@ -398,13 +434,15 @@ function parseSpShape(
         phIdx,
       )
     : ctx.defaultTextStyle
-      ? [ctx.defaultTextStyle]
+      ? [{ ...ctx.defaultTextStyle, src: 'presentation defaultTextStyle' }]
       : []
   // <p:style> fontRef color ranks between the shape's own lstStyle and the
   // layout/master defaults (a styled placeholder shows the style color, not the
   // master txStyles color — PowerPoint behavior, bnc904423)
   const fontRefColor = resolveColorNode(node['p:style']?.['a:fontRef'], ctx)
-  const chainLayers = fontRefColor ? [{ levels: [{ color: fontRefColor }] }, ...phChain] : phChain
+  const chainLayers = fontRefColor
+    ? [{ levels: [{ color: fontRefColor }], src: 'shape style' }, ...phChain]
+    : phChain
   const phInsets = ph
     ? resolvePlaceholderInsets(ctx.layoutPlaceholders, ctx.masterPlaceholders, phType, phIdx)
     : undefined
@@ -996,6 +1034,7 @@ function parsePicture(
   const duotone = parseDuotone(blip, ctx)
   const clrChange = parseClrChange(blip, ctx)
   const lum = parseLum(blip)
+  const biLevel = parseBiLevel(blip)
   // Audio/video: a:videoFile/a:audioFile under p:nvPr; blipFill is the poster frame
   const nvPr = node['p:nvPicPr']?.['p:nvPr']
   const avNode = nvPr?.['a:videoFile'] ?? nvPr?.['a:audioFile']
@@ -1030,6 +1069,7 @@ function parsePicture(
     ...(duotone ? { duotone } : {}),
     ...(clrChange ? { clrChange } : {}),
     ...(lum ? { lum } : {}),
+    ...(biLevel != null ? { biLevel } : {}),
     ...(stroke ? { stroke } : {}),
     ...(shadow ? { shadow } : {}),
     ...(glow ? { glow } : {}),
@@ -1376,6 +1416,11 @@ interface DgmTreeNode {
   asst?: boolean
   /** Explicit ST_HierBranchStyle from the presentation point ('hang'/'l'/'r'/'std'; init omitted) */
   hierBranch?: string
+  /** Explicit run size (pt) authored on the node text; autofit otherwise */
+  sizePt?: number
+  /** presStyleLbl / presStyleIdx of the node's own shape (PowerPoint's recorded color slot) */
+  styleLbl?: string
+  styleIdx?: number
 }
 
 /** Depth-first bullet lines of a node's descendants (lvl 1 = direct child). */
@@ -1388,25 +1433,35 @@ function dgmBulletLines(node: DgmTreeNode, lvl = 1): Array<{ text: string; lvl: 
   return out
 }
 
-/** colors1.xml node1 fillClrLst cycle (accent scheme colors), resolved against the theme. */
-function diagramCycleColors(colorsXml: string | undefined, ctx: ParseContext): string[] {
-  const fallback = resolveColorNode({ 'a:schemeClr': { '@_val': 'accent1' } }, ctx) ?? '#4472C4'
-  if (!colorsXml) return [fallback]
-  const lbl =
-    /<dgm:styleLbl name="node1">([\s\S]*?)<\/dgm:styleLbl>/.exec(colorsXml)?.[1] ??
-    /<dgm:styleLbl name="node0">([\s\S]*?)<\/dgm:styleLbl>/.exec(colorsXml)?.[1]
-  const lst = lbl ? /<dgm:fillClrLst[^>]*>([\s\S]*?)<\/dgm:fillClrLst>/.exec(lbl)?.[1] : undefined
-  if (!lst) return [fallback]
-  const out: string[] = []
-  for (const m of lst.matchAll(
-    /<a:schemeClr val="([^"]+)"\s*\/>|<a:srgbClr val="([^"]+)"\s*\/>/g,
-  )) {
-    const c = m[1]
-      ? resolveColorNode({ 'a:schemeClr': { '@_val': m[1] } }, ctx)
-      : '#' + String(m[2]).toUpperCase()
-    if (c) out.push(c)
+/** colorsN.xml styleLbl → fillClrLst colors (modifiers applied), resolved against the theme. */
+function diagramLabelFills(
+  colorsXml: string | undefined,
+  ctx: ParseContext,
+): Map<string, string[]> {
+  const out = new Map<string, string[]>()
+  if (!colorsXml) return out
+  let doc: any
+  try {
+    doc = parser.parse(colorsXml)
+  } catch {
+    return out
   }
-  return out.length ? out : [fallback]
+  const raw = doc?.['dgm:colorsDef']?.['dgm:styleLbl']
+  const lbls: any[] = Array.isArray(raw) ? raw : raw ? [raw] : []
+  for (const lbl of lbls) {
+    const lst = lbl?.['dgm:fillClrLst']
+    if (!lst || typeof lst !== 'object') continue
+    const fills: string[] = []
+    for (const tag of COLOR_NODE_TAGS) {
+      const v = lst[tag]
+      for (const c of Array.isArray(v) ? v : v ? [v] : []) {
+        const hex = resolveColorNode({ [tag]: c }, ctx)
+        if (hex) fills.push(hex.slice(0, 7))
+      }
+    }
+    if (fills.length) out.set(String(lbl['@_name']), fills)
+  }
+  return out
 }
 
 /** Synthetic sp node for the diagram fallback: box in EMU, solid fill, optional text lines. */
@@ -1552,12 +1607,20 @@ export function layoutDiagramFallback(
     pts.filter((p) => p?.['@_type'] === 'pres').map((p) => [String(p['@_modelId']), p]),
   )
   const hierBranchOf = new Map<string, string>()
+  // Node → recorded color slot of its own shape (first node* labelled presentation point)
+  const styleOf = new Map<string, { lbl: string; idx: number }>()
   for (const pres of presPts.values()) {
     const prSet = pres?.['dgm:prSet']
     const hb = prSet?.['dgm:presLayoutVars']?.['dgm:hierBranch']?.['@_val']
     const assoc = prSet?.['@_presAssocID']
     if (hb && hb !== 'init' && assoc && !hierBranchOf.has(String(assoc)))
       hierBranchOf.set(String(assoc), String(hb))
+    const lbl = prSet?.['@_presStyleLbl']
+    if (assoc && lbl && /^node\d/.test(String(lbl)) && !styleOf.has(String(assoc)))
+      styleOf.set(String(assoc), {
+        lbl: String(lbl),
+        idx: parseInt(prSet['@_presStyleIdx'], 10) || 0,
+      })
   }
   const bySrc = new Map<string, any[]>()
   for (const c of cxns) {
@@ -1577,9 +1640,13 @@ export function layoutDiagramFallback(
       .filter((d) => !seen.has(d) && (seen.add(d), true))
       .map((d) => {
         const pt = nodePts.get(d)
+        const sizePt = collectDgmRunSize(pt)
+        const style = styleOf.get(d)
         return {
           id: d,
           texts: collectDgmTexts(pt),
+          ...(sizePt ? { sizePt } : {}),
+          ...(style ? { styleLbl: style.lbl, styleIdx: style.idx } : {}),
           ...(pt?.['dgm:spPr']?.['a:solidFill'] ? { spPr: pt['dgm:spPr'] } : {}),
           ...(pt?.['@_type'] === 'asst' ? { asst: true } : {}),
           ...(hierBranchOf.has(d) ? { hierBranch: hierBranchOf.get(d) } : {}),
@@ -1589,9 +1656,17 @@ export function layoutDiagramFallback(
   const roots = build(String(docId))
   if (!roots.length) return []
 
-  const colors = diagramCycleColors(colorsXml, ctx)
-  const colorOf = (node: DgmTreeNode, i: number): string | { spPr: any } =>
-    node.spPr ? { spPr: node.spPr } : colors[i % colors.length]!
+  const labelFills = diagramLabelFills(colorsXml, ctx)
+  // node1 fillClrLst cycle (accent scheme colors) for nodes without a recorded slot
+  const colors = labelFills.get('node1') ??
+    labelFills.get('node0') ?? [
+      resolveColorNode({ 'a:schemeClr': { '@_val': 'accent1' } }, ctx) ?? '#4472C4',
+    ]
+  const colorOf = (node: DgmTreeNode, i: number): string | { spPr: any } => {
+    if (node.spPr) return { spPr: node.spPr }
+    const slot = node.styleLbl ? labelFills.get(node.styleLbl) : undefined
+    return slot ? slot[(node.styleIdx ?? 0) % slot.length]! : colors[i % colors.length]!
+  }
   const hasHierarchy = roots.some((r) => r.children.length)
   const sps: any[] = []
   // Text sizes scale with the box and shrink with line count (SmartArt autofit, coarse)
@@ -1641,27 +1716,30 @@ export function layoutDiagramFallback(
                         ? 'stacked'
                         : layoutId != null && /^bList/.test(layoutId)
                           ? 'cards'
-                          : layoutId != null && /^(process|hProcess|bProcess)/.test(layoutId)
-                            ? 'procCards'
-                            : layoutId != null && /^lProcess/.test(layoutId)
-                              ? 'colProcess'
-                              : layoutId != null && /^equation/.test(layoutId)
-                                ? 'equation'
-                                : layoutId != null && /^pyramid/.test(layoutId)
-                                  ? 'pyramid'
-                                  : layoutId != null && /^Picture/.test(layoutId)
-                                    ? 'strips'
-                                    : layoutId === 'chevron2'
-                                      ? 'chevronList'
-                                      : layoutId != null && /^chevron/.test(layoutId)
-                                        ? 'chevronRow'
-                                        : layoutId != null && /^(cycle[127]|radial)/.test(layoutId)
-                                          ? 'cycle'
-                                          : layoutId != null && /orgchart/i.test(layoutId)
-                                            ? 'orgChart'
-                                            : layoutId != null && /^hierarchy/.test(layoutId)
-                                              ? 'hierarchy'
-                                              : 'blocks'
+                          : layoutId != null && /^process4(#|$)/.test(layoutId)
+                            ? 'arrowBands'
+                            : layoutId != null && /^(process|hProcess|bProcess)/.test(layoutId)
+                              ? 'procCards'
+                              : layoutId != null && /^lProcess/.test(layoutId)
+                                ? 'colProcess'
+                                : layoutId != null && /^equation/.test(layoutId)
+                                  ? 'equation'
+                                  : layoutId != null && /^pyramid/.test(layoutId)
+                                    ? 'pyramid'
+                                    : layoutId != null && /^Picture/.test(layoutId)
+                                      ? 'strips'
+                                      : layoutId === 'chevron2'
+                                        ? 'chevronList'
+                                        : layoutId != null && /^chevron/.test(layoutId)
+                                          ? 'chevronRow'
+                                          : layoutId != null &&
+                                              /^(cycle[127]|radial)/.test(layoutId)
+                                            ? 'cycle'
+                                            : layoutId != null && /orgchart/i.test(layoutId)
+                                              ? 'orgChart'
+                                              : layoutId != null && /^hierarchy/.test(layoutId)
+                                                ? 'hierarchy'
+                                                : 'blocks'
   const family = byLayout === 'blocks' && !hasHierarchy ? 'flatGrid' : byLayout
 
   if (family === 'flatGrid') {
@@ -2360,6 +2438,80 @@ export function layoutDiagramFallback(
         ),
       )
     })
+  } else if (family === 'arrowBands') {
+    // process4 (Detailed Process, lin fromB): full-width bands stacked top-down. Every
+    // band but the last is a downArrowCallout 1.538x the height of the closing rect;
+    // bands overlap by 0.015 (negative sp). Header text sits in the callout's top
+    // 0.351 (rect: 0.54), the children fill 0.351..0.65 (rect: 0.52..0.98) side by
+    // side. PowerPoint paints the closing rect with node1 slot 0 and every callout
+    // with slot 1 (measured on a PowerPoint deck); child cells are fgAccFollowNode1.
+    const n = roots.length
+    const OVER = 0.015
+    const unit = frameCy / (1 + 1.538 * (n - 1) - OVER * (n - 1))
+    const stroke = '#FFFFFF'
+    const node1 = labelFills.get('node1') ?? colors
+    const cellFill = labelFills.get('fgAccFollowNode1')?.[0] ?? dgmTint(colors[0]!, 0.35)
+    const heads: Array<{
+      node: DgmTreeNode
+      box: { x: number; y: number; cx: number; cy: number }
+    }> = []
+    const cells: Array<{
+      node: DgmTreeNode
+      box: { x: number; y: number; cx: number; cy: number }
+    }> = []
+    let y = 0
+    roots.forEach((node, i) => {
+      const last = i === n - 1
+      const bh = last ? unit : unit * 1.538
+      const kids = node.children
+      const base = node.spPr ? { spPr: node.spPr } : node1[last ? 0 : 1 % node1.length]!
+      sps.push(
+        dgmSp({ x: 0, y, cx: frameCx, cy: bh }, base, [], {
+          prst: last ? 'rect' : 'downArrowCallout',
+          stroke,
+        }),
+      )
+      const headCy = kids.length ? bh * (last ? 0.54 : 0.351) : bh * (last ? 1 : 0.65)
+      heads.push({ node, box: { x: 0, y, cx: frameCx, cy: headCy } })
+      if (kids.length) {
+        const top = y + bh * (last ? 0.52 : 0.351)
+        const cy = bh * (last ? 0.46 : 0.299)
+        const cw = frameCx / kids.length
+        kids.forEach((kid, k) => {
+          cells.push({ node: kid, box: { x: k * cw, y: top, cx: cw, cy } })
+        })
+      }
+      y += bh - unit * OVER
+    })
+    // primFontSz op=equ: all headers share one size, all cells share one size
+    const headPt = Math.min(
+      ...heads.map((h) => h.node.sizePt ?? fitSizeW(h.box.cy * 0.78, h.box.cx, h.node.texts, 65)),
+    )
+    const cellPt = cells.length
+      ? Math.min(
+          ...cells.map(
+            (c) => c.node.sizePt ?? fitSizeW(c.box.cy * 0.8, c.box.cx, c.node.texts, 65),
+          ),
+        )
+      : 0
+    for (const c of cells)
+      sps.push(
+        dgmSp(
+          c.box,
+          cellFill,
+          c.node.texts.map((tx) => ({ text: tx, lvl: 0, sizePt: cellPt })),
+          { stroke, textColor: '#000000' },
+        ),
+      )
+    for (const h of heads)
+      sps.push(
+        dgmSp(
+          h.box,
+          '#000000',
+          h.node.texts.map((tx) => ({ text: tx, lvl: 0, sizePt: headPt })),
+          { noFill: true },
+        ),
+      )
   } else if (family === 'procCards') {
     // process cards: items in a row — accent title box, outlined child panel offset
     // below-right, small arrow between items
@@ -2662,6 +2814,16 @@ function collectDgmTexts(pt: any): string[] {
   return out
 }
 
+/** Explicit sz (pt) of the first run of a dgm:pt text, if authored. */
+function collectDgmRunSize(pt: any): number | undefined {
+  const body = pt?.['dgm:t']
+  if (!body || typeof body !== 'object') return undefined
+  const p = Array.isArray(body['a:p']) ? body['a:p'][0] : body['a:p']
+  const r = Array.isArray(p?.['a:r']) ? p['a:r'][0] : p?.['a:r']
+  const sz = parseInt(r?.['a:rPr']?.['@_sz'], 10)
+  return sz > 0 ? sz / 100 : undefined
+}
+
 function findDescendantPic(node: any, depth = 0): any | undefined {
   if (!node || typeof node !== 'object' || depth > 6) return undefined
   const pics = node['p:pic']
@@ -2745,7 +2907,8 @@ function parseTable(
     colWidths,
     rowHeights,
     rows,
-    styleFlags: { firstRow: flags.firstRow, bandRow: flags.bandRow },
+    ...(styleId ? { styleId } : {}),
+    styleFlags: { ...flags },
     ...(tblPr['@_rtl'] === '1' || tblPr['@_rtl'] === 'true' ? { rtl: true } : {}),
     ...(bgFill && bgFill.type !== 'none' ? { bgFill } : {}),
   }
@@ -2805,6 +2968,9 @@ function parseTableCell(
   ] as const) {
     const ln = tcPr[tag]
     if (!ln || typeof ln !== 'object') continue
+    // PowerPoint ignores a zero-width cell border and draws the table style's
+    // line instead; a shape outline at w="0" is a hairline, a cell border is not
+    if (ln['@_w'] === '0' && !('a:noFill' in ln)) continue
     const stroke = parseStroke({ 'a:ln': ln }, ctx)
     if (stroke) borders[key] = stroke
   }
@@ -2870,6 +3036,15 @@ function parseLum(blipNode: any): { bright: number; contrast: number } | undefin
   const contrast = pct(attrs['@_contrast'])
   if (!bright && !contrast) return undefined
   return { bright, contrast }
+}
+
+/** <a:biLevel thresh>: black/white threshold in 1/1000 %, default 50%. */
+function parseBiLevel(blipNode: any): number | undefined {
+  const bl = blipNode?.['a:biLevel']
+  if (bl === undefined) return undefined
+  // A bare self-closing <a:biLevel/> parses to '' and keeps the 50% default
+  const thresh = bl && typeof bl === 'object' ? intOr(bl['@_thresh'], 50000) : 50000
+  return Math.max(0, Math.min(1, thresh / 100000))
 }
 
 /** <a:duotone>: two colors mapping image luminance dark→light (theme texture backgrounds). */
@@ -2939,6 +3114,7 @@ function parseFill(spPr: any, ctx: ParseContext): Fill | undefined {
       const duotone = parseDuotone(blip['a:blip'], ctx)
       const clrChange = parseClrChange(blip['a:blip'], ctx)
       const lum = parseLum(blip['a:blip'])
+      const biLevel = parseBiLevel(blip['a:blip'])
       const fr = blip['a:stretch']?.['a:fillRect']
       const pct = (v: unknown) => (v != null ? (parseInt(String(v), 10) || 0) / 100000 : 0)
       const fillRect =
@@ -2967,6 +3143,7 @@ function parseFill(spPr: any, ctx: ParseContext): Fill | undefined {
         ...(duotone ? { duotone } : {}),
         ...(clrChange ? { clrChange } : {}),
         ...(lum ? { lum } : {}),
+        ...(biLevel != null ? { biLevel } : {}),
         ...(tile ? { tile } : {}),
       }
     }
@@ -3004,8 +3181,19 @@ function parseGradFill(grad: any, ctx: ParseContext): Fill | undefined {
     lin != null ? parseInt(lin['@_ang'], 10) || 0 : grad['a:path'] == null ? 5400000 : undefined
   const scaled = lin != null && (lin['@_scaled'] === '1' || lin['@_scaled'] === 'true')
   const ftr = grad['a:path']?.['a:fillToRect']
-  // Omitted fillToRect attributes default to 0 (whole tile rect), not to a centered inset
-  const frac = (v: unknown) => (v != null ? (parseInt(String(v), 10) || 0) / 100000 : 0)
+  // Omitted fillToRect attributes default to 0 (whole tile rect), not to a centered inset.
+  // ST_Percentage is either 1/1000 % ("50000") or the suffixed form Google Slides writes ("50%")
+  const frac = (v: unknown) => {
+    if (v == null) return 0
+    const str = String(v)
+    const n = parseFloat(str) || 0
+    return str.trim().endsWith('%') ? n / 100 : n / 100000
+  }
+  const tr = grad['a:tileRect']
+  const tileRect =
+    tr != null && typeof tr === 'object'
+      ? { l: frac(tr['@_l']), t: frac(tr['@_t']), r: frac(tr['@_r']), b: frac(tr['@_b']) }
+      : undefined
   return {
     type: 'gradient',
     stops,
@@ -3024,6 +3212,7 @@ function parseGradFill(grad: any, ctx: ParseContext): Fill | undefined {
           },
         }
       : {}),
+    ...(tileRect && (tileRect.l || tileRect.t || tileRect.r || tileRect.b) ? { tileRect } : {}),
   }
 }
 
@@ -3105,8 +3294,13 @@ function parseTextBody(
       : [txBody['a:p']]
     : []
   // Inheritance chain: the shape's own <a:lstStyle> first, then the placeholder layout/master chain
-  const ownStyle = parseLstStyleLevels(txBody['a:lstStyle'], ctx.theme)
-  const chain: Array<TextStyleLevels | undefined> = [ownStyle, ...phChain]
+  const ownStyle = parseLstStyleLevels(txBody['a:lstStyle'], ctx.theme, {
+    mediaRels: ctx.mediaRels,
+  })
+  const chain: Array<TextStyleLevels | undefined> = [
+    ownStyle ? { ...ownStyle, src: 'shape lstStyle' } : undefined,
+    ...phChain,
+  ]
   const paragraphs: Paragraph[] = paras.map((p: any) => parseParagraph(p, ctx, chain))
 
   let autofit: TextBody['autofit'] = 'none'
@@ -3220,13 +3414,19 @@ function parseParagraph(
   // without sz/b/fill takes them from here (python-pptx paragraph.font, WPS exports).
   const defRPrNode = pPr['a:defRPr']
   const paraStyle = parseDefRPrStyle(defRPrNode, ctx.theme, ctx.phClr)
-  const runDflt = paraStyle ? { ...dflt, ...paraStyle } : dflt
+  const runDflt = paraStyle
+    ? { ...dflt, ...paraStyle, src: paragraphSources(dflt, paraStyle) }
+    : dflt
+  // A paragraph defRPr naming a concrete ea face replaces the level's theme ref, not just its resolution
+  if (runDflt && paraStyle?.eaFont && !paraStyle.eaFontRef) delete runDflt.eaFontRef
+  if (runDflt && paraStyle?.latinFont && !paraStyle.latinFontRef) delete runDflt.latinFontRef
   const defRPr = paraStyle ? parseParagraphDefRPr(defRPrNode, paraStyle) : undefined
   const runsRaw = p['a:r'] ? (Array.isArray(p['a:r']) ? p['a:r'] : [p['a:r']]) : []
   const runs: TextRun[] = runsRaw.map((r: any) => {
     const run = parseRun(r, ctx, runDflt)
     // a:fld rewritten to a:r by parseShapeFragment (a genuine a:r never carries @_type)
     if (r?.['@_type']) run.field = String(r['@_type'])
+    if (r?.['@_gxRaw']) run.rawXml = base64ToUtf8(String(r['@_gxRaw']))
     return run
   })
   // <a:fld> reaching here in its original form (parse paths without the fragment
@@ -3245,7 +3445,7 @@ function parseParagraph(
   // A field with no cached text (<a:fld type="slidenum"> straight from the layout,
   // never opened in PowerPoint) is not empty: its value is substituted at render time.
   const endPr = p['a:endParaRPr']
-  if (endPr && typeof endPr === 'object' && runs.every((r) => !r.text && !r.field)) {
+  if (endPr && typeof endPr === 'object' && runs.every((r) => !r.text && !r.field && !r.rawXml)) {
     const mark = parseRun({ 'a:rPr': endPr, 'a:t': '' }, ctx, runDflt)
     mark.paraMark = true
     runs.splice(0, runs.length, mark)
@@ -3273,6 +3473,14 @@ function parseParagraph(
     if (pPr['a:buAutoNum']['@_type']) bullet.numType = String(pPr['a:buAutoNum']['@_type'])
     const startAt = parseInt(pPr['a:buAutoNum']['@_startAt'], 10)
     if (Number.isFinite(startAt) && startAt > 1) bullet.startAt = startAt
+  } else if (pPr['a:buBlip'] !== undefined) {
+    bullet = { type: 'blip' }
+    const embed = blipEmbedId(pPr['a:buBlip']?.['a:blip'])
+    if (embed) {
+      bullet.blipEmbedId = embed
+      const ref = ctx.mediaRels?.get(embed)
+      if (ref) bullet.mediaRef = ref
+    }
   }
   if (bullet && bullet.type !== 'none') {
     if (pPr['a:buClr']) {
@@ -3285,6 +3493,10 @@ function parseParagraph(
     if (pPr['a:buSzPct']?.['@_val']) {
       const v = parseInt(pPr['a:buSzPct']['@_val'], 10)
       if (Number.isFinite(v)) bullet.sizePct = v / 1000
+    }
+    if (pPr['a:buSzPts']?.['@_val']) {
+      const v = parseInt(pPr['a:buSzPts']['@_val'], 10)
+      if (Number.isFinite(v)) bullet.sizePt = v / 100
     }
   }
 
@@ -3304,7 +3516,21 @@ function parseParagraph(
   // (the master bodyStyle's buChar/marL/indent is where classic-template body bullets come from).
   // No field-wise merge: a paragraph redefining its bullet resets unspecified buClr/buSzPct/buFont
   // to follow the text (buClrTx/buSzTx/buFontTx semantics), not the chain's values.
-  const effBullet = bullet ?? dflt?.bullet
+  let effBullet = bullet ?? dflt?.bullet
+  // buFontTx/buSzTx/buClrTx on a paragraph that inherits its glyph: the glyph stays, but
+  // font/size/color follow the text instead of the chain's values
+  if (!bullet && effBullet && effBullet.type !== 'none') {
+    const tx = (k: string) => pPr[k] !== undefined
+    if (tx('a:buFontTx') || tx('a:buSzTx') || tx('a:buClrTx')) {
+      effBullet = { ...effBullet }
+      if (tx('a:buFontTx')) delete effBullet.font
+      if (tx('a:buSzTx')) {
+        delete effBullet.sizePct
+        delete effBullet.sizePt
+      }
+      if (tx('a:buClrTx')) delete effBullet.color
+    }
+  }
   const hasMarL = marLRaw != null && !Number.isNaN(marLRaw)
   const hasMarR = marRRaw != null && !Number.isNaN(marRRaw)
   const hasIndent = indentRaw != null && !Number.isNaN(indentRaw)
@@ -3339,6 +3565,9 @@ function parseParagraph(
   return {
     runs,
     align: pPr['@_algn'] ? alignMap[pPr['@_algn']] : dflt?.align,
+    ...(pPr['@_algn'] || dflt?.align != null
+      ? { alignSrc: pPr['@_algn'] ? 'paragraph' : (dflt?.src?.align ?? 'inherited') }
+      : {}),
     ...(rtl != null ? { rtl } : {}),
     level,
     pPrExplicit,
@@ -3399,6 +3628,34 @@ const CJK_RE =
 const CS_RE =
   /[\u0590-\u07bf\u08a0-\u08ff\u0900-\u0dff\u0e00-\u0eff\u1000-\u109f\u1780-\u17ff\ufb1d-\ufdff\ufe70-\ufeff]/
 
+const SOURCE_FIELDS = [
+  'fontSize',
+  'bold',
+  'italic',
+  'color',
+  'latinFont',
+  'eaFont',
+  'csFont',
+  'align',
+] as const
+
+/** The paragraph's own defRPr overrides the chain for the fields it sets. */
+function paragraphSources(
+  dflt: LevelTextStyle | undefined,
+  paraStyle: LevelTextStyle,
+): NonNullable<LevelTextStyle['src']> {
+  const src: NonNullable<LevelTextStyle['src']> = { ...dflt?.src }
+  for (const field of SOURCE_FIELDS) {
+    if (paraStyle[field] != null) src[field] = 'paragraph defRPr'
+  }
+  return src
+}
+
+function themeFontSource(ref: string | undefined): string | undefined {
+  if (!ref?.startsWith('+')) return undefined
+  return ref.startsWith('+mj') ? 'theme major' : 'theme minor'
+}
+
 function parseRun(r: any, ctx: ParseContext, dflt?: LevelTextStyle): TextRun {
   const rPr = r['a:rPr'] ?? {}
   const rawT = r['a:t']
@@ -3412,7 +3669,12 @@ function parseRun(r: any, ctx: ParseContext, dflt?: LevelTextStyle): TextRun {
           : String(rawT),
   )
   const hlink = rPr['a:hlinkClick']
-  const hlinkTarget = hlink?.['@_r:id'] ? ctx.hlinkRels?.get(String(hlink['@_r:id'])) : undefined
+  const hlinkNamedAction = namedActionOf(hlink?.['@_action'] ? String(hlink['@_action']) : null)
+  const hlinkTarget = hlinkNamedAction
+    ? `action:${hlinkNamedAction}`
+    : hlink?.['@_r:id']
+      ? ctx.hlinkRels?.get(String(hlink['@_r:id']))
+      : undefined
   const fill = rPr['a:solidFill']
   // WordArt gradient text fill: resolved stops for display, mid-stop as the flat fallback color
   let gradient: TextRun['gradient']
@@ -3462,7 +3724,10 @@ function parseRun(r: any, ctx: ParseContext, dflt?: LevelTextStyle): TextRun {
   // Font: run explicit (incl. +mj/+mn theme refs) → inherited default → theme font
   const latin =
     resolveFontRef(rPr['a:latin']?.['@_typeface'], ctx.theme, eaScript) ?? dflt?.latinFont
-  const ea = resolveFontRef(rPr['a:ea']?.['@_typeface'], ctx.theme, eaScript) ?? dflt?.eaFont
+  // An inherited ea theme ref was resolved without this run's script; redo it with the script
+  const ea =
+    resolveFontRef(rPr['a:ea']?.['@_typeface'] ?? dflt?.eaFontRef, ctx.theme, eaScript) ??
+    dflt?.eaFont
   const cs = resolveFontRef(rPr['a:cs']?.['@_typeface'], ctx.theme, eaScript) ?? dflt?.csFont
   const sym = resolveFontRef(rPr['a:sym']?.['@_typeface'], ctx.theme)
   // Symbol-slot characters (Wingdings dots/checkmarks stored as U+F0xx PUA) draw with a:sym,
@@ -3547,8 +3812,47 @@ function parseRun(r: any, ctx: ParseContext, dflt?: LevelTextStyle): TextRun {
   const csRaw = rPr['a:cs']?.['@_typeface']
   // Linked runs underline by default (PowerPoint hlink styling) unless u is explicit
   const linkUnderline = hlinkTarget != null && uAttr === undefined
+  const inherited = (field: keyof NonNullable<LevelTextStyle['src']>, has: boolean) =>
+    has ? (dflt?.src?.[field] ?? 'inherited') : 'default'
+  const fontSource = (): string => {
+    if (picked === undefined) return 'default'
+    if (puaOnly) return 'run'
+    const slot =
+      picked === csPair
+        ? 'a:cs'
+        : picked === eaPair
+          ? 'a:ea'
+          : picked === latinPair
+            ? 'a:latin'
+            : null
+    if (slot === null) return 'theme minor'
+    const own = rPr[slot]?.['@_typeface']
+    if (own != null) return themeFontSource(String(own)) ?? 'run'
+    const ref =
+      slot === 'a:latin' ? dflt?.latinFontRef : slot === 'a:ea' ? dflt?.eaFontRef : undefined
+    const layer =
+      slot === 'a:latin'
+        ? dflt?.src?.latinFont
+        : slot === 'a:ea'
+          ? dflt?.src?.eaFont
+          : dflt?.src?.csFont
+    return [themeFontSource(ref), layer ?? 'inherited'].filter(Boolean).join(' via ')
+  }
+  const styleSrc: RunStyleSource = {
+    fontSize: rPr['@_sz'] ? 'run' : inherited('fontSize', dflt?.fontSize != null),
+    bold: bAttr != null ? 'run' : inherited('bold', dflt?.bold != null),
+    italic: iAttr != null ? 'run' : inherited('italic', dflt?.italic != null),
+    color:
+      fill || gradient
+        ? 'run'
+        : hlinkTarget && ctx.theme?.colors?.hlink
+          ? 'theme hlink'
+          : inherited('color', dflt?.color != null),
+    fontFamily: fontSource(),
+  }
   return {
     text,
+    styleSrc,
     bold: bAttr != null ? bAttr === '1' || bAttr === 'true' : !!dflt?.bold,
     ...(bAttr == null ? { boldImplicit: true } : {}),
     italic: iAttr != null ? iAttr === '1' || iAttr === 'true' : !!dflt?.italic,
@@ -3592,9 +3896,9 @@ function parseRun(r: any, ctx: ParseContext, dflt?: LevelTextStyle): TextRun {
     ...(gradient ? { gradient } : {}),
     ...(runGlow ? { glow: runGlow } : {}),
     ...(reflection ? { reflection: true } : {}),
-    ...(hlink?.['@_r:id']
+    ...(hlink && (hlink['@_r:id'] != null || hlinkNamedAction)
       ? {
-          hyperlinkRId: String(hlink['@_r:id']),
+          hyperlinkRId: String(hlink['@_r:id'] ?? ''),
           ...(hlinkTarget ? { hyperlink: hlinkTarget } : {}),
           ...(hlink['@_action'] ? { hyperlinkAction: String(hlink['@_action']) } : {}),
           ...(hlink['@_tooltip'] ? { hyperlinkTooltip: String(hlink['@_tooltip']) } : {}),

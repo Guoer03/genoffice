@@ -434,4 +434,24 @@ describe('recolor replaces non-srgb fills instead of duplicating solidFill', () 
     expect(out.match(/<a:solidFill>/g)).toHaveLength(1)
     expect(out).toContain('<a:srgbClr val="112233"/>')
   })
+
+  it('gradient-filled run ends with a single solidFill, not a duplicate pair', () => {
+    const out = recolor(
+      '<a:r><a:rPr><a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs></a:gsLst></a:gradFill></a:rPr><a:t>x</a:t></a:r>',
+    )
+    expect(out.match(/<a:solidFill>/g)).toHaveLength(1)
+    expect(out).toContain('<a:srgbClr val="112233"/>')
+    expect(out).not.toContain('gradFill')
+  })
+
+  it('picture/no-fill runs end with a single solidFill', () => {
+    const blip = recolor(
+      '<a:r><a:rPr><a:blipFill><a:blip r:embed="rId2"/></a:blipFill></a:rPr><a:t>x</a:t></a:r>',
+    )
+    expect(blip.match(/<a:solidFill>/g)).toHaveLength(1)
+    expect(blip).not.toContain('blipFill')
+    const nofill = recolor('<a:r><a:rPr><a:noFill/></a:rPr><a:t>x</a:t></a:r>')
+    expect(nofill.match(/<a:solidFill>/g)).toHaveLength(1)
+    expect(nofill).not.toContain('noFill')
+  })
 })

@@ -128,7 +128,6 @@ export const pl = {
   appMoreItems: '+{count} więcej…',
   appTruncationNote: 'Pierwsze {shown} z {total}',
   appGoToButtonTitle: 'Przejdź do (⌘G)',
-  appNameBoxTitle: 'Pole nazwy — wpisz adres lub nazwę, a następnie naciśnij Enter',
   appPivotChartHintIn: 'Utwórz wykres przestawny na podstawie bieżącej tabeli przestawnej',
   appPivotChartHintOut:
     'Najpierw zaznacz komórkę w obszarze wyników tabeli przestawnej, a następnie wybierz typ wykresu',
@@ -549,6 +548,12 @@ export const pl = {
   appPdfCanceled: 'Anulowano eksport do PDF.',
   appPdfExported: 'Wyeksportowano {path}.',
   appPdfExportFailed: 'Nie można wyeksportować pliku PDF.',
+  appPrintPreparing: 'Przygotowywanie wydruku…',
+  appPrintSent: 'Wysłano do drukarki.',
+  appPrintCanceled: 'Drukowanie anulowane.',
+  appPrintFailed: 'Nie można wydrukować.',
+  appPrintNeedsFullLoad:
+    'Drukowanie wymaga pełnego wczytania skoroszytu — poczekaj na zakończenie wczytywania.',
   appCsvExportNeedsFullLoad:
     'Eksport do CSV wymaga w pełni załadowanego skoroszytu — poczekaj na zakończenie ładowania.',
   appCsvExportTooLarge: 'Arkusz jest za duży, aby wyeksportować go do CSV.',
@@ -1340,6 +1345,8 @@ export const pl = {
   appFormatMenu: 'Format',
   appRowHeight: 'Wysokość wiersza',
   appColWidth: 'Szerokość kolumny',
+  appAutoFitRowHeight: 'Autodopasowanie wysokości wierszy',
+  appAutoFitColWidth: 'Autodopasowanie szerokości kolumn',
   appRowHeightLabel: 'Wysokość wiersza (punkty)',
   appColWidthLabel: 'Szerokość kolumny (znaki)',
   appDeleteRow: 'Usuń wiersz',

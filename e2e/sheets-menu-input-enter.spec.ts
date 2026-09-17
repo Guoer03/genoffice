@@ -9,7 +9,7 @@ process.env.GENOFFICE_DEBUG_HOOKS = '1'
 
 /**
  * Regression for "typed a count into the right-click insert-N-columns box,
- * pressed Enter, nothing happened" (alpha feedback): Enter in a menu
+ * pressed Enter, nothing happened" (user report): Enter in a menu
  * count box must run the row's action like a click, not just commit the
  * number and leave the menu open.
  */
@@ -29,7 +29,7 @@ test.describe('sheets: Enter runs the context-menu insert-N action', () => {
       await expect(page.locator('.quick-card').nth(1)).toContainText('AI Sheets')
       await page.locator('.quick-card').nth(1).click()
 
-      const sheets = await waitForPageWithUrl(app, 'sheets/out')
+      const sheets = await waitForPageWithUrl(app, '://sheets/')
       await sheets.waitForFunction(() => document.body.textContent?.includes('Sheet1'), null, {
         timeout: 30_000,
       })

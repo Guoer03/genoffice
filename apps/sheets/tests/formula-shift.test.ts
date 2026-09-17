@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { shiftFormulaRefs } from '../src/domain/formula-shift'
-import type { StructuralOperation } from '../src/domain/workbook-dsl'
+import { shiftFormulaRefs } from '@genoffice/xlsx-gateway/domain/formula-shift'
+import type { StructuralOperation } from '@genoffice/xlsx-gateway/domain/workbook-dsl'
 
 const insertRows = (row: number, count = 1): StructuralOperation => ({
   op: 'insert_rows',
@@ -95,6 +95,26 @@ describe('shiftFormulaRefs: column shifts', () => {
   })
 })
 
+describe('shiftFormulaRefs: whole-row spans', () => {
+  it('shifts whole-row spans like ordinary ranges', () => {
+    expect(shift('=SUM(2:4)', insertRows(2)).formula).toBe('=SUM(3:5)')
+    expect(shift('=SUM(2:4)', insertRows(3)).formula).toBe('=SUM(2:5)')
+    // structural edits ignore $ anchors, like ordinary refs do
+    expect(shift('=SUM($2:4)', insertRows(3)).formula).toBe('=SUM($2:5)')
+    expect(shift('=SUM(2:4)', deleteRows(1)).formula).toBe('=SUM(1:3)')
+  })
+
+  it('errors and shrinks whole-row spans on deletes like ranges do', () => {
+    expect(shift('=SUM(3:4)', deleteRows(3, 2)).formula).toBe('=SUM(#REF!)')
+    expect(shift('=SUM(3:4)', deleteRows(3, 2)).hasRefError).toBe(true)
+    expect(shift('=SUM(2:5)', deleteRows(3, 2)).formula).toBe('=SUM(2:3)')
+  })
+
+  it('does not mangle A1 ranges when scanning for row spans', () => {
+    expect(shift('=SUM(B2:D4)', insertRows(2)).formula).toBe('=SUM(B3:D5)')
+  })
+})
+
 describe('shiftFormulaRefs: what must NOT be rewritten', () => {
   it('does not mangle function names containing digits', () => {
     const result = shift('=LOG10(A1)', insertRows(5))
@@ -123,6 +143,14 @@ describe('shiftFormulaRefs: sheet prefixes', () => {
 
   it('handles quoted sheet names with spaces', () => {
     expect(shift("='My Data'!B5", insertRows(3), false, 'My Data').formula).toBe("='My Data'!B6")
+  })
+
+  it("handles quoted sheet names with apostrophes ('' escaping)", () => {
+    expect(shift("='Bob''s'!B5", insertRows(3), false, "Bob's").formula).toBe("='Bob''s'!B6")
+    expect(shift("='Bob''s'!B:B", insertCols('A'), false, "Bob's").formula).toBe("='Bob''s'!C:C")
+    expect(shift("='Bob''s'!2:4", insertRows(2), false, "Bob's").formula).toBe("='Bob''s'!3:5")
+    // wrong sheet must not rewrite
+    expect(shift("='Bob''s'!B5", insertRows(3), false, 'Other').formula).toBe("='Bob''s'!B5")
   })
 })
 

@@ -10,8 +10,8 @@ import { launchShell, closeAndSaveVideo, waitForPageWithUrl } from './helpers'
 process.env.GENOFFICE_DEBUG_HOOKS = '1'
 
 /**
- * Regression for "cut K97:L97, press Right, lands on M97" (alpha
- * feedback): an arrow on a multi-cell selection must collapse to the ACTIVE
+ * Regression for "cut K97:L97, press Right, lands on M97" (user
+ * report): an arrow on a multi-cell selection must collapse to the ACTIVE
  * cell and move one step from it (Excel), not step past the range's edge.
  */
 
@@ -59,7 +59,7 @@ test.describe('sheets: arrow collapses a multi-cell selection to the active cell
       await expect(page.locator('.quick-card').nth(1)).toContainText('AI Sheets')
       await page.locator('.quick-card').nth(1).click()
 
-      const sheets = await waitForPageWithUrl(app, 'sheets/out')
+      const sheets = await waitForPageWithUrl(app, '://sheets/')
       // the replayed move must not surface as an uncaught command error
       const commandErrors: string[] = []
       sheets.on('pageerror', (err) => {

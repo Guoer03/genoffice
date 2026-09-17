@@ -9,8 +9,8 @@ import { launchShell, closeAndSaveVideo, waitForPageWithUrl } from './helpers'
 process.env.GENOFFICE_DEBUG_HOOKS = '1'
 
 /**
- * Regression for "tile-pasted cells vanish after save" (alpha
- * feedback): pasting a copied formula row into a taller target writes follower
+ * Regression for "tile-pasted cells vanish after save" (user
+ * report): pasting a copied formula row into a taller target writes follower
  * cells as {si, v} — shared-formula id without formula text. The journal
  * must materialize those into real formulas; before the fix the follow-up
  * recalc mutation wiped them and the saved file lost the whole block.
@@ -31,7 +31,7 @@ test.describe('sheets: tiled paste of formulas survives save', () => {
       await expect(page.locator('.quick-card').nth(1)).toContainText('AI Sheets')
       await page.locator('.quick-card').nth(1).click()
 
-      const sheets = await waitForPageWithUrl(app, 'sheets/out')
+      const sheets = await waitForPageWithUrl(app, '://sheets/')
       await sheets.waitForFunction(() => document.body.textContent?.includes('Sheet1'), null, {
         timeout: 30_000,
       })
@@ -92,7 +92,7 @@ test.describe('sheets: tiled paste of formulas survives save', () => {
       await sheets.waitForTimeout(800)
 
       await app.evaluate(({ webContents }) => {
-        const wc = webContents.getAllWebContents().find((w) => w.getURL().includes('sheets/out'))
+        const wc = webContents.getAllWebContents().find((w) => w.getURL().includes('://sheets/'))
         wc?.send('menu:action', 'save')
       })
 

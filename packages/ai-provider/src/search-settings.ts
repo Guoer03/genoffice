@@ -30,7 +30,9 @@ export function resolveAiSearchSettings(
 /** the stored search provider, honored only with a key; otherwise null (free chain only) */
 export function activeSearchProvider(settings: Pick<AiSettings, 'search'>): AiSearchProviderId | null {
   const search = settings.search
+  // Trim-aware: a whitespace-only key from in-memory settings falls back
+  // instead of sending `Bearer    ` to the search backend.
   if (!search) return null
   if (!AI_SEARCH_PROVIDERS.some((m) => m.id === search.provider)) return null
-  return search.providers?.[search.provider]?.apiKey ? search.provider : null
+  return search.providers?.[search.provider]?.apiKey?.trim() ? search.provider : null
 }

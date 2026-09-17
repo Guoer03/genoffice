@@ -58,9 +58,15 @@ export function normalizeRecentQuery(
 }
 
 /** sidebar filter keys that stand for a family of extensions, not one exact ext */
-const EXT_FAMILY: Record<string, readonly string[]> = {
+export const EXT_FAMILY: Record<string, readonly string[]> = {
   xlsx: ['xlsx', 'xlsm', 'xls'],
   html: ['html', 'htm'],
+}
+
+/** Family-aware extension match for sidebar filters (recents and starred share it). */
+export function matchesExtFamily(entryExt: string, filterExt: string): boolean {
+  const family = EXT_FAMILY[filterExt]
+  return family ? family.includes(entryExt) : entryExt === filterExt
 }
 
 /** Page over the recents paths, preserving the source's newest-first order (unavailable paths stay, flagged missing). */
@@ -71,8 +77,7 @@ export function pageRecentPaths(
 ): RecentPage {
   const { offset, limit, ext } = normalizeRecentQuery(raw)
   const all = statPathEntries(paths, starredPaths)
-  const family = ext ? (EXT_FAMILY[ext] ?? [ext]) : undefined
-  const filtered = family ? all.filter((entry) => family.includes(entry.ext)) : all
+  const filtered = ext ? all.filter((entry) => matchesExtFamily(entry.ext, ext)) : all
   return {
     entries: limit === 0 ? [] : filtered.slice(offset, offset + limit),
     total: filtered.length,

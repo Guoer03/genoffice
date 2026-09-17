@@ -116,6 +116,26 @@ describe('recent query ext normalization', () => {
     expect(page.total).toBe(1)
     expect(page.entries.map((entry) => entry.path)).toEqual([bookPath])
   })
+
+  it('shares the sheets/html families with the starred view (same helper)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'shell-counts-'))
+    tempDirs.push(dir)
+    const htmPath = join(dir, 'page.htm')
+    const htmlPath = join(dir, 'page.html')
+    const legacyPath = join(dir, 'legacy.xls')
+    writeFileSync(htmPath, 'html')
+    writeFileSync(htmlPath, 'html')
+    writeFileSync(legacyPath, 'sheet')
+    // pageRecentPaths is the recents helper; starred now calls the same
+    // matchesExtFamily, so assert the family includes both spellings
+    expect(
+      pageRecentPaths([htmPath, legacyPath], { ext: 'html', limit: 50 }, new Set()).total,
+    ).toBe(1)
+    expect(
+      pageRecentPaths([htmPath, legacyPath], { ext: 'xlsx', limit: 50 }, new Set()).total,
+    ).toBe(1)
+    expect(pageRecentPaths([htmlPath], { ext: 'htm', limit: 50 }, new Set()).total).toBe(0)
+  })
 })
 
 describe('count labels', () => {

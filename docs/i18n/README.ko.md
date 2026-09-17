@@ -23,6 +23,8 @@ Word, Excel, PowerPoint, PDF 파일을 당신과 당신의 AI가 함께 편집�
 
 <p align="center">
   <a href="#download"><b>다운로드</b></a> ·
+  <a href="#command-line-and-agent-skill"><b>CLI</b></a> ·
+  <a href="#mcp-server"><b>MCP</b></a> ·
   <a href="https://genoffice.ai/"><b>웹사이트</b></a> ·
   <a href="https://genoffice.ai/join"><b>커뮤니티</b></a> ·
   <a href="../../PRIVACY.md"><b>개인정보</b></a>
@@ -49,6 +51,11 @@ GenOffice는 macOS, Windows, Linux에서 사용할 수 있는 무료 오픈소�
   사용할 수 있고, 원한다면 Claude, OpenAI, Gemini, DeepSeek, Kimi, GLM,
   Qwen, Doubao, MiniMax, Grok, Mistral, OpenRouter, Requesty는 물론 OpenAI
   호환 엔드포인트(로컬 서버 포함)까지 직접 가져올 수 있습니다.
+- **스크립트로 다룰 수 있고, 에이전트가 바로 쓸 수 있습니다.** 앱에는
+  `genoffice` 명령줄과 Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot,
+  OpenCode, Windsurf용 스킬이 함께 제공되어, 코딩 에이전트가 창 하나 열지
+  않고도 내 컴퓨터에서 실제 Office 파일을 만들고, 변환하고, 읽고, 편집할 수
+  있습니다.
 
 **다운로드:** [macOS](https://github.com/genspark-ai/genoffice/releases/latest) (Apple Silicon 및 Intel) ·
 [Windows](https://github.com/genspark-ai/genoffice/releases/latest) (x64 및 Arm) ·
@@ -57,8 +64,9 @@ GenOffice는 macOS, Windows, Linux에서 사용할 수 있는 무료 오픈소�
 
 ## 데모
 
-여섯 개의 앱, 하나의 AI 패널. 모든 스크린샷은 macOS에서 실제로 구동되는
-앱이며, 패널에서 확인할 수 있는 프롬프트로 AI를 직접 실행한 결과입니다.
+여섯 개의 앱, 하나의 AI 패널, 그리고 코딩 에이전트를 위한 명령줄. 모든
+스크린샷은 macOS에서 실제로 구동되는 앱이며, 패널에서 확인할 수 있는
+프롬프트로 AI를 직접 실행한 결과입니다.
 
 ### 1 · Docs — 검토 가능한 AI로 `.docx`를 열고 편집합니다
 
@@ -156,6 +164,47 @@ GenOffice는 macOS, Windows, Linux에서 사용할 수 있는 무료 오픈소�
 </tr>
 </table>
 
+### 7 · CLI — 코딩 에이전트가 내 컴퓨터에서 GenOffice를 움직입니다
+
+GenOffice에는 `genoffice` 명령줄과 에이전트 스킬이 함께 제공됩니다. 스킬을
+설치하면 Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot, OpenCode,
+Windsurf가 앱과 동일한 엔진을 통해 창을 열지 않고도 실제 Office 파일을
+만들고, 변환하고, 읽고, 편집할 수 있습니다.
+
+<img src="../assets/readme/cli-deck-in-app.webp" alt="GenOffice Slides가 코딩 에이전트가 genoffice 명령줄로 만든 8장짜리 태양계 덱을 보여주는 화면: 캔버스에는 표지 슬라이드, 왼쪽에는 여덟 개의 축소판, AI 패널은 열려 있음" width="100%">
+
+<table>
+<tr>
+<td width="50%"><img src="../assets/readme/cli-slides-grid.webp" alt="태양계 덱의 렌더링된 슬라이드 여덟 장을 나란히 놓은 화면: 표지, 탐사 연표, 네 가지 핵심 수치, 행성 지름 막대 차트, 암석 행성 대 거대 행성, 태양이 99.8%를 차지한다는 헤드라인 숫자, 네 거대 행성 격자, 요약"></td>
+<td width="50%"><img src="../assets/readme/cli-integrations.webp" alt="GenOffice 설정의 연동 페이지: genoffice 스킬이 Claude Code에 설치되어 있고, Codex와 Cursor 옆에는 설치 버튼이 표시된 화면"></td>
+</tr>
+<tr>
+<td><b>에이전트에게 프롬프트 하나</b> — "태양계에 관한 8장짜리 덱을 만들어줘." 에이전트는 스킬을 읽고 스타일 시트, 개요, 슬라이드마다 하나씩의 페이지 스펙을 작성하고, <code>genoffice image</code>로 사진 두 장을 생성하고, <code>genoffice slides check</code>가 넘치거나 겹치는 요소를 걸러낸 뒤, <code>genoffice create</code>로 <code>.pptx</code>를 조립하고 <code>slides render</code>로 슬라이드마다 PNG 한 장을 받아 확인합니다.</td>
+<td><b>설정 → 연동에서 한 번만 설치</b> — GenOffice가 이 컴퓨터에서 찾은 코딩 에이전트를 나열하고, 선택한 각 에이전트에 스킬을 기록합니다. 스킬을 zip으로 내려받거나 <code>npx skills add genspark-ai/genoffice</code>를 실행해도 됩니다. 명령과 전체 워크플로는 <a href="#command-line-and-agent-skill">명령줄과 에이전트 스킬</a>에 있습니다.</td>
+</tr>
+</table>
+
+### 8 · MCP — Model Context Protocol로 제공되는 동일한 도구
+
+모든 `genoffice` 명령은 MCP 도구이기도 합니다. Claude Code, Claude Desktop,
+Cursor 및 다른 모든 MCP 클라이언트는 스킬을 설치하거나 창을 열 필요 없이
+직접 `genoffice mcp`를 실행해 29개의 도구와 리소스로 제공되는 작업 레퍼런스를
+얻을 수 있습니다. 앱 내부의 두 번째 HTTP 서버를 사용하면 에이전트가 눈에
+보이는 편집기 탭에서 Word 문서를 만드는 과정을 지켜볼 수도 있습니다.
+
+<img src="../assets/readme/mcp-deck-motion.webp" alt="Claude Code가 genoffice MCP 서버로 8장짜리 재생에너지 투자 브리핑 덱을 만드는 과정의 타임랩스: search로 도표와 사진을 찾고 media로 각 후보 사진을 확인한 뒤, deck_start가 스타일 시트와 개요를 작성하고, deck_page가 검사를 마친 페이지를 한 장씩 추가하며, deck_build가 .pptx를 조립하고 slides_render가 슬라이드마다 이미지를 돌려줍니다. 완성된 덱은 이후 GenOffice Slides에서 열립니다" width="100%">
+
+<table>
+<tr>
+<td width="50%"><img src="../assets/readme/mcp-deck-in-app.webp" alt="GenOffice Slides가 Claude Code가 genoffice MCP 서버로 만든 8장짜리 재생에너지 2026 덱을 보여주는 화면: 캔버스에는 풍력 발전 단지 사진이 있는 표지 슬라이드, 왼쪽에는 여덟 개의 축소판"></td>
+<td width="50%"><img src="../assets/readme/mcp-integrations.webp" alt="GenOffice 설정의 연동 페이지, MCP 부분: Claude Code용 한 줄짜리 claude mcp add 명령, Cursor, Claude Desktop 및 다른 MCP 클라이언트용 JSON 블록, 그 아래의 로컬 HTTP 서버 옵션"></td>
+</tr>
+<tr>
+<td><b>프롬프트 하나, 도구 호출 서른여덟 번, 터미널 없이</b> — "2026년 재생에너지에 관한 8장짜리 투자 브리핑을 만들어줘. 표지와 사진이 도움이 될 만한 곳에는 실제 사진을 넣어줘." 에이전트는 <code>search</code>로 도표와 사진을 가져오고, <code>media</code>로 각 후보 사진이 실제 사진인지 확인한 다음, 스타일 시트와 개요를 담아 <code>deck_start</code>를 호출하고, 이어서 슬라이드마다 <code>deck_page</code>를 호출합니다. 모든 페이지는 개요와 팔레트에 맞는지 검사를 통과해야 유지되며, <code>deck_build</code>가 <code>.pptx</code>를 조립하고, <code>slides_audit</code>이 넘치는 부분을 찾고, <code>slides_render</code>가 모델이 볼 수 있는 이미지 콘텐츠로 슬라이드마다 PNG를 돌려주면, 마지막으로 <code>deck_replace</code>가 마음에 들지 않았던 세 페이지를 고칩니다.</td>
+<td><b>설정 → 연동에서 한 번만 연결</b> — Claude Code용 <code>claude mcp add</code> 명령을 복사하거나, JSON 블록을 Cursor, Claude Desktop 또는 다른 MCP 클라이언트에 붙여넣으세요. 옵션 B는 눈에 보이는 Word 편집기를 위한 로컬 HTTP 서버를 켭니다. 두 방법 모두 <a href="#mcp-server">MCP 서버</a>에 설명되어 있습니다.</td>
+</tr>
+</table>
+
 ## GenOffice를 선택하는 이유
 
 - **오픈소스**, Apache-2.0 라이선스로 GitHub에서 공개 개발됩니다.
@@ -173,6 +222,9 @@ GenOffice는 macOS, Windows, Linux에서 사용할 수 있는 무료 오픈소�
   Word, Excel, PowerPoint로 변환하며, 스캔 문서는 시스템 OCR을 사용합니다.
 - **Markdown과 HTML도 지원**하며, 동일한 AI 패널과 로컬 Word 내보내기를 사용합
   니다.
+- **스크립트로 다룰 수 있습니다.** `genoffice` 명령줄, 에이전트 스킬, MCP
+  서버가 모든 엔진을 Claude Code, Claude Desktop, Codex, Cursor 및 다른
+  에이전트가 쓸 수 있게 하며, 이 역시 기기 내에서 동작합니다.
 - **무료**로 개인과 팀 모두 사용할 수 있습니다.
 
 ## AI 백엔드
@@ -194,6 +246,130 @@ OpenAI 호환 이미지 엔드포인트 중에서 선택합니다.
 전체 제품군은 라이트, 다크, 시스템 테마를 지원합니다. 테마는 화면에
 보이는 모습만 바꿀 뿐입니다: 내보내기, 인쇄, 저장된 파일은 항상 문서
 고유의 색상을 그대로 유지합니다.
+
+<a id="command-line-and-agent-skill"></a>
+
+## 명령줄과 에이전트 스킬
+
+앱이 파일에 할 수 있는 모든 일을 `genoffice` 명령줄은 터미널에서 할 수
+있습니다: Word, Excel, PowerPoint, PDF, Markdown, HTML을 동일한 엔진으로,
+화면 없이 검사하고, 변환하고, 만들고, 읽고, 편집합니다. GenOffice와 함께
+설치되며, 별도의 런타임이 필요 없고, 문서를 어디로도 전송하지 않습니다.
+함께 제공되는 **에이전트 스킬**과 결합하면 코딩 에이전트는 Markdown으로
+흉내 낸 결과물 대신 실제 Office 파일을 만들어내는 문서 작업자가 됩니다.
+
+**지원 대상:** Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot,
+OpenCode, Windsurf는 바로 사용할 수 있고, 스킬을 읽을 수 있는 다른 모든
+에이전트, 그리고 [MCP 서버](#mcp-server)를 통해 Claude Desktop과 모든 MCP
+클라이언트에서도 동작합니다.
+
+### 스킬 설치
+
+| 방법                                   | 동작                                                                                                                                                                 |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 앱의 **설정 → 연동**                   | 이 컴퓨터에서 찾은 에이전트를 나열하고, 클릭 한 번으로 선택한 각 에이전트에 스킬을 기록합니다. GenOffice 릴리스에 새 스킬이 포함되면 **업데이트** 버튼이 나타납니다. |
+| 같은 페이지의 **zip으로 다운로드**     | claude.ai, Claude 데스크톱 앱, 그 밖의 어시스턴트가 업로드 스킬로 받아들이는 구조입니다.                                                                             |
+| `npx skills add genspark-ai/genoffice` | 이 저장소에서 스킬을 지원하는 모든 에이전트에 설치합니다.                                                                                                            |
+
+그런 다음 새 대화를 시작해 문서를 요청하세요. 스킬은 언제 `genoffice`를
+꺼내야 하는지, 편집 전에 파일을 어떻게 읽어야 하는지, 자신의 작업을
+어떻게 검증해야 하는지를 에이전트에게 알려줍니다.
+
+### 터미널에서 빠르게 시작하기
+
+```bash
+genoffice --version
+genoffice info report.docx --json                  # headings and blocks; or sheets, slides, pages
+genoffice convert report.md --to pdf               # md/html/docx/xlsx/pptx → pdf, pdf → docx/xlsx/pptx, …
+genoffice create --type docx --from notes.md --out notes.docx
+genoffice create --type xlsx --from table.json --out sales.xlsx   # "=SUM(B2:B9)" cells stay live formulas
+genoffice docs read report.docx --range 0-9 --json # then `docs apply --ops edits.json` edits in place
+genoffice render report.docx --out shots/          # one PNG per page, to look at what you made
+genoffice open sales.xlsx                          # hand the result to the editor
+```
+
+모든 명령은 한 줄 요약을 출력하며, `--json`을 붙이면 단일 JSON 객체를
+반환합니다. 편집은 원자적입니다: 거부된 작업은 파일을 건드리지 않고,
+안내가 담긴 오류로 돌아옵니다. `genoffice help`는 현재 명령 목록을
+보여주며, 전체 레퍼런스는 [packages/cli/README.md](../../packages/cli/README.md)에 있습니다.
+
+### 에이전트가 실제로 실행하는 것
+
+위의 데모에 나온 태양계 덱은 Claude Code에서 프롬프트 하나로 만들어졌습니다.
+그 뒤에서 에이전트는 스킬의 단계별 워크플로를 따랐고, CLI는 다음 단계로
+넘어가기 전에 매 단계를 검사했습니다:
+
+```bash
+genoffice capabilities --json                        # which cloud tools GenOffice has configured
+genoffice guide slides design                        # the deck workflow and layout library
+genoffice image "the eight planets in a row …" --aspect 16:9 --out deck/assets/cover.jpg
+genoffice slides check deck/outline.json --json      # 8 pages, no findings
+genoffice slides check deck/pages/01.json --json     # builds one slide, audits overflow and overlap
+…                                                    # one page file per slide, fixed until each check is clean
+genoffice create --type pptx --spec deck/pages --outline deck/outline.json --out deck/solar-system.pptx --json
+genoffice slides render deck/solar-system.pptx --out deck/shots --json
+genoffice slides audit deck/solar-system.pptx --json    # 8 slides, no layout issues
+genoffice slides replace deck/solar-system.pptx --slide 4 --spec deck/pages/05.json --json
+genoffice open deck/solar-system.pptx
+```
+
+`genoffice` 내부에서는 어떤 모델 호출도 일어나지 않습니다: 생각은
+에이전트가 하고, 만들고 검사하는 일은 CLI가 하며, 결과는 평범한 `.pptx`로
+GenOffice나 PowerPoint에서 열립니다.
+
+<a id="mcp-server"></a>
+
+### MCP 서버
+
+동일한 명령을 [Model Context Protocol](https://modelcontextprotocol.io) 도구로도
+사용할 수 있습니다. 터미널을 실행할 수 없거나, 터미널 권한을 주고 싶지 않은
+어시스턴트를 위한 방법입니다. 연결 방법은 두 가지이며, 둘 다 **설정 → 연동 →
+MCP**에 바로 복사할 수 있는 코드 조각으로 안내되어 있습니다:
+
+| 방법                          | 설명                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **A · `genoffice mcp`**(권장) | 어시스턴트가 직접 실행하는 stdio 서버로, GenOffice가 열려 있을 필요가 없습니다. 명령마다 도구가 하나씩 있습니다(`info`, `convert`, `create_docx`, `create_xlsx`, `create_pptx`, `create_pdf`, `docs_read` / `docs_apply` / `docs_check`, `sheet_*`, `slides_*`, `render`, `guide`, `search`, `image`, `media`, `open`). 여기에 단계별 덱 흐름 `deck_start` → `deck_page` → `deck_build` → `deck_replace`가 더해집니다. Ops, 스펙, Markdown이 모두 인라인으로 전달되므로 파일 시스템이 없는 클라이언트도 문제없이 동작합니다. |
+| **B · 로컬 HTTP 서버**        | GenOffice 앱 내부에서 `http://127.0.0.1:3093/mcp`(Streamable HTTP, 레거시 SSE 지원)로 실행됩니다. 이 도구들은 눈에 보이는 Word 편집기 탭을 움직입니다: `create_session`, `insert_content`, `replace_blocks`, `apply_ops`, `read_document`, `save_session`이며, 문서가 만들어지는 과정을 직접 지켜볼 수 있습니다. 기본값은 꺼짐이며, 같은 설정 화면에서 켤 수 있습니다.                                                                                                                                                       |
+
+```bash
+# Claude Code
+claude mcp add --transport stdio genoffice -- genoffice mcp
+```
+
+```jsonc
+// Cursor, Claude Desktop 또는 다른 모든 MCP 클라이언트
+{ "mcpServers": { "genoffice": { "command": "genoffice", "args": ["mcp"] } } }
+```
+
+여기서 `genoffice`는 앱 내부에 포함된 바로 그 CLI입니다(macOS에서는
+`/Applications/GenOffice.app/Contents/Resources/cli/genoffice`이며, 설정
+화면에서 실제 설치 경로를 확인할 수 있습니다). 이 서버는 자체 워크플로
+안내를 담고 있고, 작업 레퍼런스를 `genoffice://guide/*` 리소스로 노출하므로
+별도의 스킬이 필요 없습니다. 스킬과 MCP 서버는 함께 존재할 수 있으며,
+어시스턴트가 둘 중 하나를 선택해 사용합니다. 클라우드 기능(`search`,
+`image`, `media`)은 여전히 GenOffice에 설정된 공급자를 거치며, 그 밖의
+모든 기능은 로컬에서 동작하고, `GENOFFICE_ALLOWED_ROOTS`가 모든 도구를
+지정한 폴더로 제한합니다.
+
+위의 데모에 나온 재생에너지 덱은, `genoffice` MCP 서버만 연결한 Claude
+Code에서 프롬프트 하나가 프로토콜 수준에서 어떻게 보이는지를 보여줍니다:
+
+```text
+capabilities · guide(slides, spec) · guide(slides, design)
+search(query) ×4                         → IEA, BNEF and IRENA figures for the slides
+search(query, images) ×7 · media(url, ask) ×7
+                                         → candidate photos, each one checked to be a real photograph
+deck_start(dir, style, outline)          → outline checked: 8 pages to write
+deck_page(dir, 0, page) … deck_page(dir, 7, page)
+                                         → each page checked against the outline and the palette; one page sent again
+deck_build(dir, out)                     → renewables-2026.pptx, no image failures
+slides_audit(file) · slides_render(file, out)
+                                         → no layout findings; 8 PNGs come back as image content
+deck_replace(dir, n, page) ×3 · slides_render(file, out)
+                                         → three pages fixed after looking at the renders
+```
+
+서른여덟 번의 호출, 약 13분, 그리고 어시스턴트는 터미널을 한 번도 건드리지 않았습니다: 도표, 사진, 가이드, 검사, 렌더링 결과가 모두 MCP 도구 결과로 오갔습니다. 기기를 벗어난 것은 `search`와 `media`뿐이며, GenOffice에 설정된 제공업체로 전달되었습니다.
 
 <a id="download"></a>
 
@@ -360,6 +536,19 @@ OpenRouter, Requesty, OpenCode Zen/Go를 위한 직접 키 사용을 지원하�
 뒤 실제 Word 구조로 변환됩니다: 제목, 문단, 목록, 표, 카드, KPI 행,
 양식 필드, 페이지 배경까지 포함됩니다. Word에 대응 요소가 없는 시각
 요소(차트, 아이콘, 장식된 박스)만 이미지로 삽입됩니다.
+
+</details>
+
+<details>
+<summary><b>Claude Code, Codex, Cursor 또는 스크립트에서 GenOffice를 제어할 수 있나요?</b></summary>
+
+네. GenOffice는 동일한 엔진을 화면 없이 실행하는 `genoffice` 명령줄을
+설치합니다: 터미널이나 스크립트에서 문서를 검사하고, 변환하고, 만들고,
+읽고, 편집할 수 있으며, 프로그램용 `--json` 출력도 제공합니다. 함께
+제공되는 에이전트 스킬은 Claude Code, Codex, Cursor, Gemini CLI, GitHub
+Copilot, OpenCode, Windsurf에 사용법을 알려주며, **설정 → 연동**에서
+설치할 수 있습니다. [명령줄과 에이전트 스킬](#command-line-and-agent-skill)을
+참고하세요.
 
 </details>
 

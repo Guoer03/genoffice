@@ -23,6 +23,8 @@ File Word, Excel, PowerPoint e PDF, modificati da te e dalla tua AI, salvati neg
 
 <p align="center">
   <a href="#download"><b>Download</b></a> ·
+  <a href="#command-line-and-agent-skill"><b>CLI</b></a> ·
+  <a href="#mcp-server"><b>MCP</b></a> ·
   <a href="https://genoffice.ai/"><b>Sito web</b></a> ·
   <a href="https://genoffice.ai/join"><b>Community</b></a> ·
   <a href="../../PRIVACY.md"><b>Privacy</b></a>
@@ -49,6 +51,11 @@ applica la modifica e ti mostra esattamente cosa ha toccato.
   nulla, oppure usa la tua chiave per Claude, OpenAI, Gemini, DeepSeek, Kimi,
   GLM, Qwen, Doubao, MiniMax, Grok, Mistral, OpenRouter, Requesty o qualsiasi endpoint
   compatibile con OpenAI, inclusi i server locali.
+- **Scriptabile e pronto per gli agenti.** L'app include una riga di comando
+  `genoffice` e uno skill per Claude Code, Codex, Cursor, Gemini CLI, GitHub
+  Copilot, OpenCode e Windsurf, così un agente di coding può creare,
+  convertire, leggere e modificare file Office reali sul tuo computer senza
+  aprire una finestra.
 
 **Scaricalo:** [macOS](https://github.com/genspark-ai/genoffice/releases/latest) (Apple Silicon e Intel) ·
 [Windows](https://github.com/genspark-ai/genoffice/releases/latest) (x64 e Arm) ·
@@ -57,8 +64,9 @@ dettagli e requisiti nella sezione [Download](#download).
 
 ## Demo
 
-Sei app, un solo pannello AI. Ogni screenshot mostra l'app reale su macOS,
-con l'AI guidata dal prompt che puoi leggere nel pannello.
+Sei app, un solo pannello AI e una riga di comando per il tuo agente di
+coding. Ogni screenshot mostra l'app reale su macOS, con l'AI guidata dal
+prompt che puoi leggere nel pannello.
 
 ### 1 · Docs — apri e modifica `.docx` con un'AI che puoi controllare
 
@@ -156,6 +164,48 @@ costruisce un unico file `.html` autosufficiente basato su quei token.
 </tr>
 </table>
 
+### 7 · CLI — il tuo agente di coding guida GenOffice, sul tuo computer
+
+GenOffice include una riga di comando `genoffice` e uno skill per agenti.
+Installa lo skill e Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot,
+OpenCode o Windsurf potranno creare, convertire, leggere e modificare file
+Office reali con gli stessi motori delle app, senza aprire una finestra.
+
+<img src="../assets/readme/cli-deck-in-app.webp" alt="GenOffice Slides mostra una presentazione di otto slide sul Sistema Solare creata da un agente di coding tramite la riga di comando genoffice: la slide di copertina sulla canvas, otto miniature a sinistra e il pannello AI aperto" width="100%">
+
+<table>
+<tr>
+<td width="50%"><img src="../assets/readme/cli-slides-grid.webp" alt="Le otto slide renderizzate della presentazione sul Sistema Solare una accanto all'altra: copertina, cronologia dell'esplorazione, quattro numeri chiave, grafico a barre dei diametri dei pianeti, mondi rocciosi contro giganti, il numero in evidenza del 99,8% del Sole, la griglia dei quattro giganti e le conclusioni"></td>
+<td width="50%"><img src="../assets/readme/cli-integrations.webp" alt="Impostazioni di GenOffice, pagina Integrazioni: lo skill genoffice installato in Claude Code, con pulsanti Installa accanto a Codex e Cursor"></td>
+</tr>
+<tr>
+<td><b>Un solo prompt al tuo agente</b> — "Crea una presentazione di otto slide sul Sistema Solare." L'agente legge lo skill, scrive un foglio di stile, una scaletta e una specifica di pagina per ogni slide, genera le due foto con <code>genoffice image</code> e lascia che <code>genoffice slides check</code> respinga tutto ciò che sborda o si sovrappone prima che <code>genoffice create</code> assembli il <code>.pptx</code> e <code>slides render</code> restituisca un PNG per slide da controllare.</td>
+<td><b>Installa una volta sola, da Impostazioni → Integrazioni</b> — GenOffice elenca gli agenti di coding che trova su questo computer e scrive lo skill in ognuno di quelli che scegli. Oppure scarica lo skill come zip, o esegui <code>npx skills add genspark-ai/genoffice</code>. I comandi e il flusso di lavoro completo sono in <a href="#command-line-and-agent-skill">Riga di comando e skill per agenti</a>.</td>
+</tr>
+</table>
+
+### 8 · MCP — gli stessi strumenti tramite il Model Context Protocol
+
+Ogni comando `genoffice` è anche uno strumento MCP. Claude Code, Claude
+Desktop, Cursor e qualsiasi altro client MCP possono avviare `genoffice mcp`
+da soli, senza alcuno skill da installare né finestre aperte, e ottengono 29
+strumenti più i riferimenti delle operazioni come risorse. Un secondo
+server HTTP dentro l'app permette a un agente di costruire un documento
+Word in una scheda dell'editor visibile mentre osservi.
+
+<img src="../assets/readme/mcp-deck-motion.webp" alt="Time-lapse di Claude Code che costruisce una presentazione per investitori di otto slide sulle energie rinnovabili tramite il server MCP di genoffice: cerca figure e foto, verifica ogni immagine candidata con media, deck_start scrive il foglio di stile e la scaletta, deck_page aggiunge una pagina controllata alla volta, deck_build assembla il .pptx e slides_render restituisce un'immagine di ogni slide; la presentazione finita si apre poi in GenOffice Slides" width="100%">
+
+<table>
+<tr>
+<td width="50%"><img src="../assets/readme/mcp-deck-in-app.webp" alt="GenOffice Slides mostra la presentazione Renewable Energy 2026 di otto slide che Claude Code ha costruito tramite il server MCP di genoffice: la slide di copertina con una fotografia di un parco eolico sulla canvas e otto miniature a sinistra"></td>
+<td width="50%"><img src="../assets/readme/mcp-integrations.webp" alt="Impostazioni di GenOffice, pagina Integrazioni, parte MCP: il comando in una riga claude mcp add per Claude Code, il blocco JSON per Cursor, Claude Desktop e altri client MCP, e l'opzione del server HTTP locale sotto"></td>
+</tr>
+<tr>
+<td><b>Un prompt, 38 chiamate a strumenti, nessun terminale</b> — "Crea una presentazione per investitori di otto slide sulle energie rinnovabili nel 2026, con una foto reale in copertina e ovunque una foto sia utile." L'agente recupera le figure e le foto con <code>search</code>, chiede a <code>media</code> se ogni immagine candidata è una fotografia reale, chiama <code>deck_start</code> con un foglio di stile e una scaletta, poi <code>deck_page</code> una volta per slide; ogni pagina viene controllata rispetto alla scaletta e alla palette prima di essere conservata, <code>deck_build</code> assembla il <code>.pptx</code>, <code>slides_audit</code> cerca sbordamenti, <code>slides_render</code> restituisce un PNG per slide come contenuto immagine che il modello può guardare, e <code>deck_replace</code> corregge le tre pagine che non gli erano piaciute.</td>
+<td><b>Connettiti una volta sola, da Impostazioni → Integrazioni</b> — copia la riga <code>claude mcp add</code> per Claude Code, o il blocco JSON in Cursor, Claude Desktop o qualsiasi altro client MCP. L'opzione B attiva il server HTTP locale per l'editor Word visibile. Entrambe sono descritte in <a href="#mcp-server">Server MCP</a>.</td>
+</tr>
+</table>
+
 ## Perché GenOffice
 
 - **Open source**, Apache-2.0, sviluppato in modo aperto su GitHub.
@@ -176,6 +226,9 @@ costruisce un unico file `.html` autosufficiente basato su quei token.
   scansioni.
 - **Anche Markdown e HTML**, con lo stesso pannello AI e l'esportazione locale
   in Word.
+- **Scriptabile.** Una riga di comando `genoffice`, uno skill per agenti e
+  un server MCP mettono ogni motore al servizio di Claude Code, Claude
+  Desktop, Codex, Cursor e altri agenti, sempre in locale.
 - **Gratuito**, per singoli utenti e team.
 
 ## Backend AI
@@ -198,6 +251,141 @@ di immagini/video.
 L'intera suite include i temi chiaro, scuro e di sistema. I temi cambiano
 solo ciò che vedi a schermo: esportazioni, stampe e file salvati mantengono
 sempre i colori originali del documento.
+
+<a id="command-line-and-agent-skill"></a>
+
+## Riga di comando e skill per agenti
+
+Tutto ciò che le app possono fare a un file, la riga di comando `genoffice`
+può farlo da un terminale: ispezionare, convertire, creare, leggere e
+modificare Word, Excel, PowerPoint, PDF, Markdown e HTML con gli stessi
+motori, senza interfaccia grafica. Si installa insieme a GenOffice, non ha
+bisogno di un runtime proprio e non invia mai un documento da nessuna parte.
+Abbinata allo **skill per agenti** incluso, trasforma un agente di coding in
+un operaio dei documenti che produce file Office reali invece di
+approssimazioni in Markdown.
+
+**Funziona con:** Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot,
+OpenCode e Windsurf senza configurazione, con qualsiasi altro agente che
+legga gli skill e, tramite il [server MCP](#mcp-server), Claude Desktop e
+qualsiasi client MCP.
+
+### Installare lo skill
+
+| Come                                     | Cosa succede                                                                                                                                                                                        |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Impostazioni → Integrazioni** nell'app | Elenca gli agenti trovati su questo computer; un clic scrive lo skill in ognuno di quelli che scegli. Un pulsante **Aggiorna** compare quando una release di GenOffice porta uno skill più recente. |
+| **Scarica come zip** nella stessa pagina | Il formato che claude.ai, le app desktop di Claude e altri assistenti accettano come skill caricato.                                                                                                |
+| `npx skills add genspark-ai/genoffice`   | Installa da questo repository in qualsiasi agente compatibile con gli skill.                                                                                                                        |
+
+Poi apri una nuova chat e chiedi un documento. Lo skill insegna all'agente
+quando ricorrere a `genoffice`, come leggere un file prima di modificarlo e
+come controllare il proprio lavoro.
+
+### Avvio rapido dal terminale
+
+```bash
+genoffice --version
+genoffice info report.docx --json                  # headings and blocks; or sheets, slides, pages
+genoffice convert report.md --to pdf               # md/html/docx/xlsx/pptx → pdf, pdf → docx/xlsx/pptx, …
+genoffice create --type docx --from notes.md --out notes.docx
+genoffice create --type xlsx --from table.json --out sales.xlsx   # "=SUM(B2:B9)" cells stay live formulas
+genoffice docs read report.docx --range 0-9 --json # then `docs apply --ops edits.json` edits in place
+genoffice render report.docx --out shots/          # one PNG per page, to look at what you made
+genoffice open sales.xlsx                          # hand the result to the editor
+```
+
+Ogni comando stampa un riepilogo di una riga, oppure un singolo oggetto JSON
+con `--json`. Le modifiche sono atomiche: un'operazione respinta lascia il
+file intatto e restituisce un errore guidato. `genoffice help` elenca i
+comandi attualmente disponibili; il riferimento completo è in
+[packages/cli/README.md](../../packages/cli/README.md).
+
+### Cosa esegue davvero l'agente
+
+La presentazione sul Sistema Solare della demo qui sopra ha richiesto un
+solo prompt in Claude Code. Dietro le quinte, l'agente ha seguito il flusso
+di lavoro a fasi dello skill e la CLI ha controllato ogni fase prima di
+avviare la successiva:
+
+```bash
+genoffice capabilities --json                        # which cloud tools GenOffice has configured
+genoffice guide slides design                        # the deck workflow and layout library
+genoffice image "the eight planets in a row …" --aspect 16:9 --out deck/assets/cover.jpg
+genoffice slides check deck/outline.json --json      # 8 pages, no findings
+genoffice slides check deck/pages/01.json --json     # builds one slide, audits overflow and overlap
+…                                                    # one page file per slide, fixed until each check is clean
+genoffice create --type pptx --spec deck/pages --outline deck/outline.json --out deck/solar-system.pptx --json
+genoffice slides render deck/solar-system.pptx --out deck/shots --json
+genoffice slides audit deck/solar-system.pptx --json    # 8 slides, no layout issues
+genoffice slides replace deck/solar-system.pptx --slide 4 --spec deck/pages/05.json --json
+genoffice open deck/solar-system.pptx
+```
+
+Nessuna chiamata a un modello avviene dentro `genoffice`: l'agente pensa, la
+CLI costruisce e controlla, e il risultato si apre in GenOffice o PowerPoint
+come un normale `.pptx`.
+
+<a id="mcp-server"></a>
+
+### Server MCP
+
+Gli stessi comandi sono disponibili come strumenti
+[Model Context Protocol](https://modelcontextprotocol.io), per gli
+assistenti che non possono eseguire un terminale o a cui preferisci non
+darne uno. Ci sono due modi per collegarsi, entrambi mostrati con frammenti
+pronti da copiare in **Impostazioni → Integrazioni → MCP**:
+
+| Modo                                  | Cos'è                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **A · `genoffice mcp`** (consigliato) | Un server stdio che l'assistente avvia da sé; GenOffice non deve essere aperto. Uno strumento per comando (`info`, `convert`, `create_docx`, `create_xlsx`, `create_pptx`, `create_pdf`, `docs_read` / `docs_apply` / `docs_check`, `sheet_*`, `slides_*`, `render`, `guide`, `search`, `image`, `media`, `open`) più il flusso di presentazione a fasi `deck_start` → `deck_page` → `deck_build` → `deck_replace`. Operazioni, specifiche e Markdown vengono passati inline, quindi funziona anche un client senza file system. |
+| **B · Server HTTP locale**            | Gira dentro l'app GenOffice su `http://127.0.0.1:3093/mcp` (Streamable HTTP, con SSE legacy). I suoi strumenti guidano una scheda dell'editor Word visibile: `create_session`, `insert_content`, `replace_blocks`, `apply_ops`, `read_document`, `save_session`, e osservi il documento prendere forma. Disattivato di default; attivalo nello stesso pannello delle impostazioni.                                                                                                                                               |
+
+```bash
+# Claude Code
+claude mcp add --transport stdio genoffice -- genoffice mcp
+```
+
+```jsonc
+// Cursor, Claude Desktop o qualsiasi altro client MCP
+{ "mcpServers": { "genoffice": { "command": "genoffice", "args": ["mcp"] } } }
+```
+
+Qui `genoffice` è la CLI inclusa nell'app (su macOS
+`/Applications/GenOffice.app/Contents/Resources/cli/genoffice`; il pannello
+delle impostazioni mostra il percorso esatto della tua installazione). Il
+server porta con sé le proprie istruzioni di workflow ed espone i
+riferimenti delle operazioni come risorse `genoffice://guide/*`, quindi non
+serve alcuno skill; lo skill e il server MCP possono coesistere e
+l'assistente ne sceglie uno. Le funzionalità cloud (`search`, `image`,
+`media`) passano comunque dal provider configurato in GenOffice; tutto il
+resto gira in locale, e `GENOFFICE_ALLOWED_ROOTS` limita ogni strumento
+alle cartelle che indichi.
+
+La presentazione sulle energie rinnovabili della demo qui sopra è come
+appare, dal lato del protocollo, un solo prompt in Claude Code con
+collegato solo il server MCP di `genoffice`:
+
+```text
+capabilities · guide(slides, spec) · guide(slides, design)
+search(query) ×4                         → IEA, BNEF and IRENA figures for the slides
+search(query, images) ×7 · media(url, ask) ×7
+                                         → candidate photos, each one checked to be a real photograph
+deck_start(dir, style, outline)          → outline checked: 8 pages to write
+deck_page(dir, 0, page) … deck_page(dir, 7, page)
+                                         → each page checked against the outline and the palette; one page sent again
+deck_build(dir, out)                     → renewables-2026.pptx, no image failures
+slides_audit(file) · slides_render(file, out)
+                                         → no layout findings; 8 PNGs come back as image content
+deck_replace(dir, n, page) ×3 · slides_render(file, out)
+                                         → three pages fixed after looking at the renders
+```
+
+Trentotto chiamate, circa tredici minuti, e l'assistente non ha mai
+toccato un terminale: le figure, le foto, le guide, i controlli e i render
+sono arrivati tutti come risultati di strumenti MCP. Solo `search` e
+`media` hanno lasciato la macchina, verso il provider configurato in
+GenOffice.
 
 <a id="download"></a>
 
@@ -371,6 +559,19 @@ ridotta a vere strutture Word: titoli, paragrafi, elenchi, tabelle, card,
 righe KPI, campi modulo e sfondi di pagina; solo gli elementi visivi senza
 un equivalente in Word (grafici, icone, box decorati) vengono incorporati
 come immagini.
+
+</details>
+
+<details>
+<summary><b>Posso guidare GenOffice da Claude Code, Codex, Cursor o da uno script?</b></summary>
+
+Sì. GenOffice installa una riga di comando `genoffice` che esegue gli stessi
+motori senza interfaccia grafica: ispeziona, converti, crea, leggi e modifica
+documenti da un terminale o da uno script, con output `--json` per i
+programmi. Lo skill per agenti incluso insegna a Claude Code, Codex, Cursor,
+Gemini CLI, GitHub Copilot, OpenCode e Windsurf a usarla; installalo da
+**Impostazioni → Integrazioni**. Vedi
+[Riga di comando e skill per agenti](#command-line-and-agent-skill).
 
 </details>
 

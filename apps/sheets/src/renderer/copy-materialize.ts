@@ -8,10 +8,10 @@
  */
 import { ISheetClipboardService } from '@univerjs/sheets-ui'
 
-import { formatAddress } from '../domain/cell-address'
+import { formatAddress } from '@genoffice/xlsx-gateway/domain/cell-address'
 import { t } from './i18n/locale'
 import { ensureLazyRangeLoaded } from './univer-sync'
-import type { LazyWorkbookState, UniverRuntime } from './univer-state'
+import { lazySheetScreenExtent, type LazyWorkbookState, type UniverRuntime } from './univer-state'
 
 /// readWorkbookRange's protocol cap (MAX_RANGE_CELLS, desktop-api.ts); the
 /// lazy window holds one contiguous range, so a selection past this cannot
@@ -31,15 +31,24 @@ async function materializeSelection(
   if (!workbook || !worksheet || !selection) return
   const sheetMeta = state.file.sheets.find((sheet) => sheet.id === worksheet.getSheetId())
   if (!sheetMeta) return
+  // Selection coordinates are screen-space, so the clamp must be the screen
+  // extent (file extent shifted by this session's structural ops), not the
+  // file extent: after insert/delete ops a file-space clamp cuts off or
+  // overshoots the last rows/columns (cf. applyRangeInLoadedChunks in
+  // univer-sync.ts, which documents the same rule).
+  const extent = lazySheetScreenExtent(state, worksheet.getSheetId()) ?? {
+    rows: sheetMeta.rowCount,
+    columns: sheetMeta.columnCount,
+  }
   const range = {
     startRow: selection.getRow(),
     startColumn: selection.getColumn(),
-    endRow: Math.min(selection.getRow() + selection.getHeight() - 1, sheetMeta.rowCount - 1),
-    endColumn: Math.min(
-      selection.getColumn() + selection.getWidth() - 1,
-      sheetMeta.columnCount - 1,
-    ),
+    endRow: Math.min(selection.getRow() + selection.getHeight() - 1, extent.rows - 1),
+    endColumn: Math.min(selection.getColumn() + selection.getWidth() - 1, extent.columns - 1),
   }
+  // A selection wholly past the extent (stale anchor after deletes) inverts
+  // the range: nothing to load, and downstream math must not see it.
+  if (range.endRow < range.startRow || range.endColumn < range.startColumn) return
   const loaded = state.loadedRanges.get(worksheet.getSheetId())
   if (
     loaded &&

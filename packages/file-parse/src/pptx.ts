@@ -19,8 +19,8 @@ function slideNumber(path: string): number {
 
 /**
  * One paragraph's text in document order. Only #text directly under a:t counts: untrimmed, the
- * whitespace laying out any other element is a value too. <a:br> is a soft line break, and
- * <a:fld> (slide number, date) contributes its own a:t where it sits.
+ * whitespace laying out any other element is a value too. <a:br> is a soft line break, <a:tab>
+ * is a tab stop between runs, and <a:fld> (slide number, date) contributes its own a:t where it sits.
  */
 function collectText(nodes: readonly unknown[], out: string[], isText = false): void {
   for (const node of nodes) {
@@ -30,6 +30,8 @@ function collectText(nodes: readonly unknown[], out: string[], isText = false): 
         if (isText) out.push(String(value))
       } else if (key === 'a:br') {
         out.push('\n')
+      } else if (key === 'a:tab') {
+        out.push('\t')
       } else if (Array.isArray(value)) {
         collectText(value, out, key === 'a:t')
       }

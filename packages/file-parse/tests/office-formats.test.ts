@@ -1,6 +1,9 @@
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import JSZip from 'jszip'
 import { parseFileToText } from '../src/index'
+import { pptxToText } from '../src/pptx'
+import { xlsxToText } from '../src/xlsx'
 import {
   buildDocxFixture,
   buildPptxFixture,
@@ -33,6 +36,35 @@ describe('parseFileToText: docx', () => {
     expect(result.text).toContain('First paragraph hello docx')
     expect(result.text).toContain('Metric | Value')
     expect(result.text).toContain('Revenue | 100')
+  })
+
+  it('includes footnote and endnote text', async () => {
+    const zip = await JSZip.loadAsync(await buildDocxFixture())
+    const part = (tag: string, id: string, text: string) =>
+      `<w:${tag} w:id="${id}"><w:p><w:r><w:t>${text}</w:t></w:r></w:p></w:${tag}>`
+    zip.file(
+      'word/footnotes.xml',
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<w:footnotes xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+        part('footnote', '-1', '') +
+        part('footnote', '1', 'Footnote detail') +
+        '</w:footnotes>',
+    )
+    zip.file(
+      'word/endnotes.xml',
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<w:endnotes xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+        part('endnote', '1', 'Endnote detail') +
+        '</w:endnotes>',
+    )
+    const path = writeFixture(
+      'notes.docx',
+      await zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE' }),
+    )
+    const result = await parseFileToText(path)
+    expect(result.ok).toBe(true)
+    expect(result.text).toContain('Footnote detail')
+    expect(result.text).toContain('Endnote detail')
   })
 })
 
@@ -84,6 +116,21 @@ describe('parseFileToText: pptx', () => {
     // and the comment the slide carries is markup, not text
     expect(result.text).not.toContain('authoring note')
   })
+
+  it('keeps a:tab as a tab between runs', async () => {
+    const zip = new JSZip()
+    zip.file(
+      'ppt/slides/slide1.xml',
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" ' +
+        'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">' +
+        '<p:cSld><p:spTree><p:sp><p:txBody><a:p>' +
+        '<a:r><a:t>Col1</a:t></a:r><a:tab/><a:r><a:t>Col2</a:t></a:r>' +
+        '</a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>',
+    )
+    const bytes = await zip.generateAsync({ type: 'uint8array' })
+    expect(await pptxToText(bytes)).toContain('Col1\tCol2')
+  })
 })
 
 describe('parseFileToText: xlsx', () => {
@@ -121,5 +168,32 @@ describe('parseFileToText: xlsx', () => {
     const result = await parseFileToText(path)
     expect(result.ok).toBe(false)
     expect(result.error).toBeTruthy()
+  })
+
+  it('reads lowercase cell refs at the right columns', async () => {
+    const zip = new JSZip()
+    zip.file(
+      'xl/workbook.xml',
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ' +
+        'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+        '<sheets><sheet name="S1" sheetId="1" r:id="rId1"/></sheets></workbook>',
+    )
+    zip.file(
+      'xl/_rels/workbook.xml.rels',
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>' +
+        '</Relationships>',
+    )
+    zip.file(
+      'xl/worksheets/sheet1.xml',
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+        '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>' +
+        '<row r="1"><c r="a1"><v>1</v></c><c r="c1"><v>3</v></c></row>' +
+        '</sheetData></worksheet>',
+    )
+    const bytes = await zip.generateAsync({ type: 'uint8array' })
+    expect(await xlsxToText(bytes)).toContain('1 |  | 3')
   })
 })

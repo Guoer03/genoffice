@@ -22,6 +22,9 @@ export type ActiveWorkbook = NonNullable<
 >
 export type UniverWorksheet = NonNullable<ReturnType<ActiveWorkbook['getActiveSheet']>>
 
+/// Column intervals (inclusive) of one row whose cells fed a wrap measure.
+export type WrapMeasureCoverage = Array<readonly [number, number]>
+
 export interface LazyWorkbookState {
   readonly file: WorkbookFile
   readonly generation: number
@@ -30,13 +33,15 @@ export interface LazyWorkbookState {
   readonly retryTimers: Map<string, ReturnType<typeof setTimeout>>
   readonly appliedMerges: Map<string, Set<string>>
   readonly appliedRowKeys: Map<string, Set<string>>
-  /// Per-sheet rows already run through the load-time wrap auto-fit measure.
-  /// Streamed windows re-patch constantly (indexing growth, evict/reload) and
-  /// a re-measure of an unchanged row still emits row-height mutations —
-  /// find-replace re-searches on every mutation and re-scrolls to its match,
-  /// so an unmemoized measure keeps the grid oscillating for as long as the
-  /// stream runs (alpha r167).
-  readonly measuredWrapRows: Map<string, Set<number>>
+  /// Per-sheet, per-row column intervals already run through the load-time
+  /// wrap auto-fit measure. Streamed windows re-patch constantly (indexing
+  /// growth, evict/reload) and a re-measure of an unchanged row still emits
+  /// row-height mutations — find-replace re-searches on every mutation and
+  /// re-scrolls to its match, so an unmemoized measure keeps the grid
+  /// oscillating for as long as the stream runs. A row is only
+  /// measured again when a window brings wrap cells in columns no earlier
+  /// measure of that row has seen.
+  readonly measuredWrapRows: Map<string, Map<number, WrapMeasureCoverage>>
   /// Per-sheet union of IStyleData keys carried by <row s= customFormat> and
   /// <col style=> defaults. Univer composes row/col styles into every cell
   /// per-property, but an OOXML cell xf is complete: styled cells null these
@@ -132,14 +137,15 @@ export interface LazyWorkbookState {
     /// a sheet's formula list came back truncated (>100k formulas): a cold
     /// IronCalc import of such a workbook grinds for minutes and gigabytes,
     /// so the engine fallback is off for the session — cached values stand
+    /// (unless the file has none: see truncatedIndexRetiresEngine)
     engineOverBudget: boolean
     readonly formulaCells: Map<string, ReadonlySet<number>>
     readonly overlay: Map<string, Map<string, PinnedClosureCell>>
     /// per-sheet: viewport row the last SUCCESSFUL overlay window was
     /// anchored at and whether it covered every formula band; a partial
-    /// window re-anchors when the user scrolls far from it (alpha ledger
-    /// r141). Written only after the sidecar run succeeds — early writes
-    /// latched stale flags on failure (bugbot).
+    /// window re-anchors when the user scrolls far from it. Written only
+    /// after the sidecar run succeeds — early writes latched stale flags on
+    /// failure.
     readonly follow: Map<string, { anchorRow: number; complete: boolean }>
     /// re-anchor throttle: no new run while one is in flight, and at most
     /// one every few seconds — each run reads thousands of sidecar cells
@@ -151,6 +157,7 @@ export interface LazyWorkbookState {
 export interface PinnedClosureCell {
   readonly f?: string
   readonly v?: string | number | boolean | null
+  readonly isError?: boolean
 }
 
 /// Data extent in screen coordinates: the file extent shifted by this

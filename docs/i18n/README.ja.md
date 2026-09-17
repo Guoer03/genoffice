@@ -2,7 +2,7 @@
   <a href="https://genoffice.ai/">
     <picture>
       <source srcset="../assets/readme/hero-dark.webp" media="(prefers-color-scheme: dark)">
-      <img src="../assets/readme/hero.webp" alt="GenOffice — Microsoft Office に代わるオープンソースの AI オフィススイート：Docs、Sheets、Slides、PDF、Markdown、HTML と内蔵 AI パネル" width="100%">
+      <img src="../assets/readme/hero.webp" alt="GenOffice — オープンソースの AI オフィススイート：Docs、Sheets、Slides、PDF、Markdown、HTML と内蔵 AI パネル" width="100%">
     </picture>
   </a>
 </p>
@@ -23,6 +23,8 @@ Word、Excel、PowerPoint、PDF ファイルを、あなたとあなたの AI �
 
 <p align="center">
   <a href="#download"><b>ダウンロード</b></a> ·
+  <a href="#command-line-and-agent-skill"><b>CLI</b></a> ·
+  <a href="#mcp-server"><b>MCP</b></a> ·
   <a href="https://genoffice.ai/"><b>ウェブサイト</b></a> ·
   <a href="https://genoffice.ai/join"><b>コミュニティ</b></a> ·
   <a href="../../PRIVACY.md"><b>プライバシー</b></a>
@@ -34,6 +36,7 @@ GenOffice は、macOS・Windows・Linux で動作する、Microsoft Office に�
 - **レビューできる AI。** 編集内容は変更履歴と差分として反映され、ワンクリックで元に戻せます。スプレッドシートには貼り付けの数値ではなく、実際に機能する数式が入ります。デッキやページはキャンバス上に生成され、そのまま自由に編集できます。
 - **設計からローカル動作。** ファイルの開く・編集・保存・変換はすべてお使いのマシン上で行われます。PDF → Word / Excel / PowerPoint、Markdown → Word、HTML → Word の変換もすべてオンデバイスで実行されます。マシンの外に出るのは、選択した AI プロバイダーへの呼び出しだけです。
 - **キーを使うか使わないかはあなた次第。** Genspark でサインインすればキーの用意は不要です。あるいは、Claude、OpenAI、Gemini、DeepSeek、Kimi、GLM、Qwen、Doubao、MiniMax、Grok、Mistral、OpenRouter、Requesty、または任意の OpenAI 互換エンドポイント（ローカルサーバーを含む）向けに、自分の API キーを持ち込むこともできます。
+- **スクリプト化でき、エージェントからも使える。** アプリには `genoffice` コマンドラインと、Claude Code、Codex、Cursor、Gemini CLI、GitHub Copilot、OpenCode、Windsurf 向けのスキルが同梱されているため、コーディングエージェントはウィンドウを一つも開かずに、お使いのマシン上で本物の Office ファイルを作成・変換・読み取り・編集できます。
 
 **入手方法：** [macOS](https://github.com/genspark-ai/genoffice/releases/latest)（Apple Silicon および Intel）·
 [Windows](https://github.com/genspark-ai/genoffice/releases/latest)（x64 および Arm）·
@@ -42,7 +45,7 @@ GenOffice は、macOS・Windows・Linux で動作する、Microsoft Office に�
 
 ## デモ
 
-6 つのアプリ、1 つの AI パネル。すべてのスクリーンショットは macOS 上の実際のアプリで撮影したもので、AI はパネル内に表示されているプロンプトそのもので動かしています。
+6 つのアプリ、1 つの AI パネル、そしてコーディングエージェント向けのコマンドライン。すべてのスクリーンショットは macOS 上の実際のアプリで撮影したもので、AI はパネル内に表示されているプロンプトそのもので動かしています。
 
 ### 1 · Docs — `.docx` を開いて、レビューできる AI で編集
 
@@ -138,6 +141,45 @@ GenOffice は、macOS・Windows・Linux で動作する、Microsoft Office に�
 </tr>
 </table>
 
+### 7 · CLI — コーディングエージェントが、あなたのマシン上で GenOffice を操作
+
+GenOffice には `genoffice` コマンドラインとエージェントスキルが同梱されています。スキルをインストールすれば、Claude Code、Codex、Cursor、Gemini CLI、GitHub Copilot、OpenCode、Windsurf が、アプリと同じエンジンを通じて本物の Office ファイルを作成・変換・読み取り・編集できます。ウィンドウを開く必要はありません。
+
+<img src="../assets/readme/cli-deck-in-app.webp" alt="GenOffice Slides が、コーディングエージェントが genoffice コマンドラインで組み立てた 8 枚構成の太陽系デッキを表示している様子：キャンバスには表紙スライド、左側に 8 枚のサムネイル、AI パネルは開いた状態" width="100%">
+
+<table>
+<tr>
+<td width="50%"><img src="../assets/readme/cli-slides-grid.webp" alt="太陽系デッキのレンダリング済みスライド 8 枚を並べたもの：表紙、探査の年表、4 つの重要な数字、惑星の直径の棒グラフ、岩石惑星と巨大惑星の比較、太陽が 99.8% を占めるというヒーロー数字、4 つの巨大惑星のグリッド、まとめ"></td>
+<td width="50%"><img src="../assets/readme/cli-integrations.webp" alt="GenOffice の設定、連携ページ：genoffice スキルが Claude Code にインストール済みで、Codex と Cursor の横にはインストールボタンが表示されている"></td>
+</tr>
+<tr>
+<td><b>エージェントへのプロンプトは 1 つ</b> — 「太陽系についての 8 枚構成のデッキを作って」。エージェントはスキルを読み、スタイルシート、アウトライン、スライドごとのページ仕様を書き、<code>genoffice image</code> で 2 枚の写真を生成し、<code>genoffice slides check</code> にはみ出しや重なりのある要素を弾かせてから、<code>genoffice create</code> で <code>.pptx</code> を組み立て、<code>slides render</code> でスライドごとの PNG を受け取って確認します。</td>
+<td><b>インストールは設定 → 連携から 1 回だけ</b> — GenOffice がこのコンピューター上で見つかったコーディングエージェントを一覧し、選んだそれぞれにスキルを書き込みます。スキルを zip としてダウンロードするか、<code>npx skills add genspark-ai/genoffice</code> を実行しても構いません。コマンドとワークフローの全体は <a href="#command-line-and-agent-skill">コマンドラインとエージェントスキル</a> にあります。</td>
+</tr>
+</table>
+
+### 8 · MCP — Model Context Protocol を通じて同じツールを提供
+
+`genoffice` のすべてのコマンドは MCP ツールでもあります。Claude Code、Claude
+Desktop、Cursor、その他任意の MCP クライアントは、スキルのインストールも
+ウィンドウを開く必要もなく、自分自身で `genoffice mcp` を起動して、29 個の
+ツールとリソースとして提供される操作リファレンスを得られます。アプリ内蔵の
+もう 1 つの HTTP サーバーを使えば、エージェントが目に見えるエディタータブで
+Word ドキュメントを組み立てる様子を見守ることもできます。
+
+<img src="../assets/readme/mcp-deck-motion.webp" alt="Claude Code が genoffice MCP サーバー経由で 8 枚構成の再生可能エネルギー投資家向けブリーフィングデッキを組み立てるタイムラプス：search で図版と写真を探し、media で候補の写真を 1 枚ずつ確認し、deck_start がスタイルシートとアウトラインを書き込み、deck_page が検査済みのページを 1 枚ずつ追加し、deck_build が .pptx を組み立て、slides_render がスライドごとの画像を返す。完成したデッキはその後 GenOffice Slides で開かれる" width="100%">
+
+<table>
+<tr>
+<td width="50%"><img src="../assets/readme/mcp-deck-in-app.webp" alt="GenOffice Slides が、Claude Code が genoffice MCP サーバー経由で組み立てた 8 枚構成の再生可能エネルギー 2026 デッキを表示している様子：キャンバスには風力発電所の写真入りの表紙スライド、左側に 8 枚のサムネイル"></td>
+<td width="50%"><img src="../assets/readme/mcp-integrations.webp" alt="GenOffice の設定、連携ページ、MCP 部分：Claude Code 用の 1 行の claude mcp add コマンド、Cursor・Claude Desktop・その他の MCP クライアント用の JSON ブロック、その下にあるローカル HTTP サーバーのオプション"></td>
+</tr>
+<tr>
+<td><b>プロンプト 1 つ、ツール呼び出し 38 回、ターミナルなし</b> — 「2026 年の再生可能エネルギーについての 8 枚構成の投資家向けブリーフィングを、表紙とその他写真が役立つ場所に実写を入れて作って」。エージェントは <code>search</code> で図版と写真を集め、<code>media</code> で候補の写真それぞれが実写かどうかを確認したうえで、スタイルシートとアウトラインを添えて <code>deck_start</code> を呼び出し、続けてスライドごとに <code>deck_page</code> を呼び出します。各ページはアウトラインとパレットに沿っているか検査に通ってから保持され、<code>deck_build</code> が <code>.pptx</code> を組み立て、<code>slides_audit</code> がはみ出しを探し、<code>slides_render</code> がモデルが確認できる画像コンテンツとしてスライドごとの PNG を返し、最後に <code>deck_replace</code> が気に入らなかった 3 ページを修正します。</td>
+<td><b>設定 → 連携から 1 回接続するだけ</b> — Claude Code 用の <code>claude mcp add</code> コマンドをコピーするか、JSON ブロックを Cursor・Claude Desktop・その他の MCP クライアントに貼り付けます。オプション B は、目に見える Word エディターのためのローカル HTTP サーバーを有効にします。どちらも <a href="#mcp-server">MCP サーバー</a> で説明しています。</td>
+</tr>
+</table>
+
 ## GenOffice を選ぶ理由
 
 - **オープンソース**。Apache-2.0 ライセンスで、GitHub 上で公開開発。
@@ -155,6 +197,9 @@ GenOffice は、macOS・Windows・Linux で動作する、Microsoft Office に�
   PDF を Word・Excel・PowerPoint に変換。スキャンにはシステム OCR を使用。
 - **Markdown と HTML にも対応**。同じ AI パネルを使い、ローカルで Word に書き出せ
   る。
+- **スクリプト化できる。** `genoffice` コマンドライン、エージェントスキル、MCP
+  サーバーにより、すべてのエンジンを Claude Code・Claude Desktop・Codex・Cursor
+  などのエージェントから使える。もちろんオンデバイスのまま。
 - **無料**。個人でもチームでも利用できる。
 
 ## AI バックエンド
@@ -173,6 +218,127 @@ OpenAI、Gemini、Doubao/Seedream、GLM、Grok、Qwen、MiniMax、または任�
 
 スイート全体でライト・ダーク・システムのテーマに対応しています。テーマが変わるのは画面表示
 だけで、書き出し・印刷・保存されたファイルは常にドキュメント本来の色を保持します。
+
+<a id="command-line-and-agent-skill"></a>
+
+## コマンドラインとエージェントスキル
+
+アプリがファイルに対してできることはすべて、`genoffice` コマンドラインからターミナルで行えます。
+Word、Excel、PowerPoint、PDF、Markdown、HTML の検査・変換・作成・読み取り・編集を、同じエンジンで
+ヘッドレスに実行します。GenOffice と一緒にインストールされ、独自のランタイムは不要で、ドキュメント
+をどこかへ送信することもありません。同梱の**エージェントスキル**と組み合わせれば、コーディング
+エージェントは Markdown による代用品ではなく、本物の Office ファイルを生み出すドキュメント作業者に
+なります。
+
+**対応エージェント：** Claude Code、Codex、Cursor、Gemini CLI、GitHub Copilot、OpenCode、Windsurf
+はそのまま使え、スキルを読めるその他のエージェント、さらに [MCP サーバー](#mcp-server) を通じて
+Claude Desktop とあらゆる MCP クライアントでも動作します。
+
+### スキルをインストールする
+
+| 方法                                    | 動作                                                                                                                                                                                       |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| アプリの **設定 → 連携**                | このコンピューター上で見つかったエージェントを一覧し、ワンクリックで選んだそれぞれにスキルを書き込みます。GenOffice のリリースに新しいスキルが含まれていると**更新**ボタンが表示されます。 |
+| 同じページの **zip としてダウンロード** | claude.ai、Claude デスクトップアプリ、その他のアシスタントがアップロード用スキルとして受け付ける構成です。                                                                                 |
+| `npx skills add genspark-ai/genoffice`  | このリポジトリから、スキルに対応する任意のエージェントにインストールします。                                                                                                               |
+
+その後、新しいチャットを始めてドキュメントを依頼してください。スキルは、いつ `genoffice` を使うべきか、
+編集前にファイルをどう読むか、自分の成果物をどう確認するかをエージェントに教えます。
+
+### ターミナルからのクイックスタート
+
+```bash
+genoffice --version
+genoffice info report.docx --json                  # headings and blocks; or sheets, slides, pages
+genoffice convert report.md --to pdf               # md/html/docx/xlsx/pptx → pdf, pdf → docx/xlsx/pptx, …
+genoffice create --type docx --from notes.md --out notes.docx
+genoffice create --type xlsx --from table.json --out sales.xlsx   # "=SUM(B2:B9)" cells stay live formulas
+genoffice docs read report.docx --range 0-9 --json # then `docs apply --ops edits.json` edits in place
+genoffice render report.docx --out shots/          # one PNG per page, to look at what you made
+genoffice open sales.xlsx                          # hand the result to the editor
+```
+
+各コマンドは 1 行の要約を出力し、`--json` を付けると単一の JSON オブジェクトを返します。編集はアト
+ミックです。拒否された操作はファイルに一切触れず、対処方法を示したエラーとして返ってきます。
+`genoffice help` で現在のコマンド一覧を確認でき、完全なリファレンスは
+[packages/cli/README.md](../../packages/cli/README.md) にあります。
+
+### エージェントが実際に実行しているもの
+
+上のデモの太陽系デッキは、Claude Code へのプロンプト 1 つで作られました。その裏では、エージェントが
+スキルの段階的なワークフローに従い、CLI が各段階を次に進む前に検査していました。
+
+```bash
+genoffice capabilities --json                        # which cloud tools GenOffice has configured
+genoffice guide slides design                        # the deck workflow and layout library
+genoffice image "the eight planets in a row …" --aspect 16:9 --out deck/assets/cover.jpg
+genoffice slides check deck/outline.json --json      # 8 pages, no findings
+genoffice slides check deck/pages/01.json --json     # builds one slide, audits overflow and overlap
+…                                                    # one page file per slide, fixed until each check is clean
+genoffice create --type pptx --spec deck/pages --outline deck/outline.json --out deck/solar-system.pptx --json
+genoffice slides render deck/solar-system.pptx --out deck/shots --json
+genoffice slides audit deck/solar-system.pptx --json    # 8 slides, no layout issues
+genoffice slides replace deck/solar-system.pptx --slide 4 --spec deck/pages/05.json --json
+genoffice open deck/solar-system.pptx
+```
+
+`genoffice` の内部でモデル呼び出しは一切行われません。考えるのはエージェント、組み立てと検査は CLI
+が担い、結果は通常の `.pptx` として GenOffice や PowerPoint で開けます。
+
+<a id="mcp-server"></a>
+
+### MCP サーバー
+
+同じコマンド群は [Model Context Protocol](https://modelcontextprotocol.io) の
+ツールとしても利用できます。ターミナルを実行できない、あるいはターミナルを
+渡したくないアシスタント向けの方法です。接続方法は 2 つあり、どちらも
+**設定 → 連携 → MCP** にすぐコピーできるスニペット付きで用意されています：
+
+| 方法                            | 内容                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **A · `genoffice mcp`**（推奨） | アシスタント自身が起動する stdio サーバーで、GenOffice を起動しておく必要はありません。コマンドごとに 1 つのツール（`info`、`convert`、`create_docx`、`create_xlsx`、`create_pptx`、`create_pdf`、`docs_read` / `docs_apply` / `docs_check`、`sheet_*`、`slides_*`、`render`、`guide`、`search`、`image`、`media`、`open`）に加えて、段階的なデッキフロー `deck_start` → `deck_page` → `deck_build` → `deck_replace` があります。Ops、スペック、Markdown はすべてインラインで渡されるため、ファイルシステムを持たないクライアントでも動作します。 |
+| **B · ローカル HTTP サーバー**  | GenOffice アプリ内部で `http://127.0.0.1:3093/mcp`（Streamable HTTP、レガシー SSE 対応）として動作します。そのツールは目に見える Word エディタータブを操作します：`create_session`、`insert_content`、`replace_blocks`、`apply_ops`、`read_document`、`save_session`。ドキュメントが形になっていく様子をその場で見られます。デフォルトはオフで、同じ設定パネルで有効にできます。                                                                                                                                                                  |
+
+```bash
+# Claude Code
+claude mcp add --transport stdio genoffice -- genoffice mcp
+```
+
+```jsonc
+// Cursor、Claude Desktop、その他任意の MCP クライアント
+{ "mcpServers": { "genoffice": { "command": "genoffice", "args": ["mcp"] } } }
+```
+
+ここでの `genoffice` は、アプリに同梱されているあの CLI そのものです
+（macOS では `/Applications/GenOffice.app/Contents/Resources/cli/genoffice`。
+設定パネルに、実際のインストール先の正確なパスが表示されます）。このサーバー
+は独自のワークフロー手順を備えており、操作リファレンスを `genoffice://guide/*`
+リソースとして公開するため、スキルは不要です。スキルと MCP サーバーは共存
+でき、どちらを使うかはアシスタントが選びます。クラウド機能（`search`、
+`image`、`media`）は引き続き GenOffice で設定したプロバイダーを経由し、それ
+以外はすべてローカルで動作し、`GENOFFICE_ALLOWED_ROOTS` によりすべてのツール
+が指定したフォルダに限定されます。
+
+上のデモの再生可能エネルギーデッキは、`genoffice` MCP サーバーだけを接続した
+Claude Code へのプロンプト 1 つが、プロトコルの側からはどう見えるかを示した
+ものです：
+
+```text
+capabilities · guide(slides, spec) · guide(slides, design)
+search(query) ×4                         → IEA, BNEF and IRENA figures for the slides
+search(query, images) ×7 · media(url, ask) ×7
+                                         → candidate photos, each one checked to be a real photograph
+deck_start(dir, style, outline)          → outline checked: 8 pages to write
+deck_page(dir, 0, page) … deck_page(dir, 7, page)
+                                         → each page checked against the outline and the palette; one page sent again
+deck_build(dir, out)                     → renewables-2026.pptx, no image failures
+slides_audit(file) · slides_render(file, out)
+                                         → no layout findings; 8 PNGs come back as image content
+deck_replace(dir, n, page) ×3 · slides_render(file, out)
+                                         → three pages fixed after looking at the renders
+```
+
+38 回の呼び出し、約 13 分間、そしてアシスタントは一度もターミナルに触れませんでした。図版、写真、ガイド、検査、レンダリングの結果はすべて MCP ツールの結果としてやり取りされました。マシンの外に出たのは `search` と `media` だけで、GenOffice に設定されたプロバイダーへ送られました。
 
 <a id="download"></a>
 
@@ -334,6 +500,18 @@ DeepSeek、Kimi、GLM、Qwen、Doubao、MiniMax、Grok、Mistral、OpenRouter、
 し、段落、リスト、表、カード、KPI 行、フォームフィールド、ページ背景といった本物の Word 構
 造に落とし込まれます。Word に対応する表現がないビジュアル（チャート、アイコン、装飾ボックス
 など）だけが画像として埋め込まれます。
+
+</details>
+
+<details>
+<summary><b>Claude Code、Codex、Cursor、またはスクリプトから GenOffice を操作できますか？</b></summary>
+
+はい。GenOffice は、同じエンジンをヘッドレスで実行する `genoffice` コマンドラインをインストール
+します。ターミナルやスクリプトからドキュメントの検査・変換・作成・読み取り・編集ができ、プログラ
+ム向けに `--json` 出力も用意されています。同梱のエージェントスキルは Claude Code、Codex、Cursor、
+Gemini CLI、GitHub Copilot、OpenCode、Windsurf にその使い方を教えます。インストールは
+**設定 → 連携** から行えます。詳しくは
+[コマンドラインとエージェントスキル](#command-line-and-agent-skill) を参照してください。
 
 </details>
 

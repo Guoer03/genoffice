@@ -128,7 +128,6 @@ export const ru = {
   appMoreItems: 'ещё +{count}…',
   appTruncationNote: 'Первые {shown} из {total}',
   appGoToButtonTitle: 'Переход (⌘G)',
-  appNameBoxTitle: 'Поле имени — введите адрес или имя и нажмите Ввод',
   appPivotChartHintIn: 'Создать сводную диаграмму из текущей сводной таблицы',
   appPivotChartHintOut:
     'Сначала выделите ячейку в области вывода сводной таблицы, затем выберите тип диаграммы',
@@ -539,6 +538,12 @@ export const ru = {
   appPdfCanceled: 'Экспорт в PDF отменён.',
   appPdfExported: 'Экспортировано: {path}.',
   appPdfExportFailed: 'Не удаётся экспортировать PDF.',
+  appPrintPreparing: 'Подготовка к печати…',
+  appPrintSent: 'Отправлено на принтер.',
+  appPrintCanceled: 'Печать отменена.',
+  appPrintFailed: 'Не удалось напечатать.',
+  appPrintNeedsFullLoad:
+    'Для печати книга должна быть полностью загружена — дождитесь окончания загрузки.',
   appCsvExportNeedsFullLoad:
     'Экспорт в CSV требует полностью загруженной книги — дождитесь завершения загрузки.',
   appCsvExportTooLarge: 'Лист слишком большой для экспорта в CSV.',
@@ -1330,6 +1335,8 @@ export const ru = {
   appFormatMenu: 'Формат',
   appRowHeight: 'Высота строки',
   appColWidth: 'Ширина столбца',
+  appAutoFitRowHeight: 'Автоподбор высоты строки',
+  appAutoFitColWidth: 'Автоподбор ширины столбца',
   appRowHeightLabel: 'Высота строки (пункты)',
   appColWidthLabel: 'Ширина столбца (символы)',
   appDeleteRow: 'Удалить строку',

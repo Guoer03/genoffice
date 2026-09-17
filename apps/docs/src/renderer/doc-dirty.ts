@@ -3,6 +3,9 @@
  * tick and the crash-recovery push. Only persisted state counts — transient UI
  * state (AI highlights, selection, view modes) must never appear here.
  */
+import type { HeaderFooter, SectionInfo, StyleUpsert } from '@genoffice/docx-engine'
+
+import type { PendingNumbering } from './doc-state'
 export interface DocDirtyState {
   dirtyRef: { current: boolean }
   sectionDirty: boolean
@@ -23,6 +26,7 @@ export interface DocDirtyState {
   inksDirty: boolean
   notesDirty: boolean
   sourcesDirty: boolean
+  zoteroDocumentDataDirty: boolean
   themeFontsDirty: boolean
   themeColorsDirty: boolean
   commentsDirty: boolean
@@ -52,6 +56,7 @@ export function isDocDirty(s: DocDirtyState): boolean {
     s.inksDirty ||
     s.notesDirty ||
     s.sourcesDirty ||
+    s.zoteroDocumentDataDirty ||
     s.themeFontsDirty ||
     s.themeColorsDirty ||
     s.commentsDirty ||
@@ -59,4 +64,33 @@ export function isDocDirty(s: DocDirtyState): boolean {
     s.writeProtectionDirty ||
     s.removePersonalInfoDirty
   )
+}
+
+/** The edit-tracking setters resetCrossDocEditState clears (structural subset
+ *  of FileActionContext, so the helper stays unit-testable without the editor). */
+export interface CrossDocEditStateSink {
+  setSectionsDirty: (value: number[]) => void
+  setTrailingStartType: (value: SectionInfo['startType'] | null) => void
+  setSectionHfEdits: (value: Record<string, HeaderFooter>) => void
+  setPgNumEdit: (value: { fmt?: string; start?: number } | null) => void
+  setPgNumDirtySections: (value: number[]) => void
+  setPendingNumbering: (value: PendingNumbering) => void
+  setStyleUpserts: (value: Record<string, StyleUpsert>) => void
+}
+
+/**
+ * Clear the section/numbering/style edit-tracking states. The save path calls
+ * this once the bytes land; a document swap (open/new) must call it too, or
+ * doc A's edits leak into pristine doc B — tripping the close guard and
+ * mis-applying section indices, numbering restarts and style upserts on B's
+ * next save. Single source of truth so the call sites cannot drift apart.
+ */
+export function resetCrossDocEditState(sink: CrossDocEditStateSink): void {
+  sink.setSectionsDirty([])
+  sink.setTrailingStartType(null)
+  sink.setSectionHfEdits({})
+  sink.setPgNumEdit(null)
+  sink.setPgNumDirtySections([])
+  sink.setPendingNumbering({ newDefs: [], restartNums: [] })
+  sink.setStyleUpserts({})
 }

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-import { isSameFile, isValidRenameName } from '../src/main/rename-validation'
+import { isSameFile, isValidRawRenameName, isValidRenameName } from '../src/main/rename-validation'
 
 describe('home rename validation', () => {
   it('rejects every Windows-illegal name character with the localized gate', () => {
@@ -41,10 +41,22 @@ describe('home rename validation', () => {
       expect(isValidRenameName(bad)).toBe(false)
     }
     expect(isValidRenameName('report.')).toBe(false)
+    expect(isValidRenameName('report ')).toBe(false)
     expect(isValidRenameName('.')).toBe(false)
     expect(isValidRenameName('a'.repeat(256))).toBe(false)
     expect(isValidRenameName('com10.pdf')).toBe(true)
     expect(isValidRenameName('my CON file.pdf')).toBe(true)
     expect(isValidRenameName('a'.repeat(255))).toBe(true)
+  })
+
+  it('rejects raw names with surrounding whitespace instead of silently trimming', () => {
+    // The IPC handler validates the raw name: trimming "report " to
+    // "report" first made the trailing-space gate unreachable.
+    for (const raw of ['report ', ' report', '  report  ', 'report\t', '\nreport.pdf']) {
+      expect(isValidRawRenameName(raw)).toBe(false)
+    }
+    expect(isValidRawRenameName('quarterly report (final).pdf')).toBe(true)
+    expect(isValidRawRenameName('report.')).toBe(false)
+    expect(isValidRawRenameName('')).toBe(false)
   })
 })

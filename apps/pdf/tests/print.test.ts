@@ -39,8 +39,13 @@ describe('printPdf', () => {
 
     await printPdf(doc)
 
-    expect(getPage).toHaveBeenCalledTimes(3)
+    expect(getPage).toHaveBeenCalledTimes(6)
     expect(getPage).toHaveBeenNthCalledWith(1, 1)
+    expect(getPage).toHaveBeenNthCalledWith(2, 2)
+    expect(getPage).toHaveBeenNthCalledWith(3, 3)
+    expect(getPage).toHaveBeenNthCalledWith(4, 1)
+    expect(getPage).toHaveBeenNthCalledWith(5, 2)
+    expect(getPage).toHaveBeenNthCalledWith(6, 3)
     expect(render).toHaveBeenCalledTimes(3)
     expect(imgsAtPrintTime).toBe(3)
     expect(window.print).toHaveBeenCalledTimes(1)
@@ -63,11 +68,25 @@ describe('printPdf', () => {
     await printPdf(doc, [4, 2, 99, 0])
 
     // Out-of-range entries are dropped; the rest render in document order.
-    expect(getPage).toHaveBeenCalledTimes(2)
+    // Measure pass fetches each target first, then the render pass refetches.
+    expect(getPage).toHaveBeenCalledTimes(4)
     expect(getPage).toHaveBeenNthCalledWith(1, 2)
     expect(getPage).toHaveBeenNthCalledWith(2, 4)
+    expect(getPage).toHaveBeenNthCalledWith(3, 2)
+    expect(getPage).toHaveBeenNthCalledWith(4, 4)
     expect(render).toHaveBeenCalledTimes(2)
     expect(imgsAtPrintTime).toBe(2)
+    expect(window.print).toHaveBeenCalledTimes(1)
+  })
+
+  it('drops non-integer page targets instead of aborting the job', async () => {
+    const { doc, getPage } = fakeDoc(5)
+    await printPdf(doc, [1.5, 2, 99])
+    // 1.5 would throw inside pdf.js getPage and abort the whole print;
+    // only the valid integer target renders (measure + render passes).
+    expect(getPage).toHaveBeenCalledTimes(2)
+    expect(getPage).toHaveBeenNthCalledWith(1, 2)
+    expect(getPage).toHaveBeenNthCalledWith(2, 2)
     expect(window.print).toHaveBeenCalledTimes(1)
   })
 
@@ -117,6 +136,8 @@ describe('printScaleForAreas', () => {
   it('falls back to the target for empty or degenerate input', () => {
     expect(printScaleForAreas([])).toBeCloseTo(200 / 72, 10)
     expect(printScaleForAreas([0])).toBeCloseTo(200 / 72, 10)
+    expect(printScaleForAreas([Number.NaN])).toBeCloseTo(200 / 72, 10)
+    expect(printScaleForAreas([Number.POSITIVE_INFINITY])).toBeCloseTo(200 / 72, 10)
   })
 
   it('scales down proportionally over budget, never below the 150 DPI baseline', () => {
@@ -143,7 +164,7 @@ describe('printPdf render scale', () => {
   it('renders small documents at 200 DPI (all pages measured before the render pass)', async () => {
     const { doc, scales, getPage } = scalesDoc(2)
     await printPdf(doc)
-    expect(getPage).toHaveBeenCalledTimes(2)
+    expect(getPage).toHaveBeenCalledTimes(4)
     expect(scales).toEqual([1, 1, 200 / 72, 200 / 72])
   })
 
@@ -159,9 +180,45 @@ describe('printPdf render scale', () => {
   it('budgets a page subset on its own: two pages out of a huge document print at 200 DPI', async () => {
     const { doc, scales, getPage } = scalesDoc(200)
     await printPdf(doc, [7, 3])
-    expect(getPage).toHaveBeenCalledTimes(2)
+    expect(getPage).toHaveBeenCalledTimes(4)
     expect(getPage).toHaveBeenNthCalledWith(1, 3)
     expect(getPage).toHaveBeenNthCalledWith(2, 7)
+    expect(getPage).toHaveBeenNthCalledWith(3, 3)
+    expect(getPage).toHaveBeenNthCalledWith(4, 7)
     expect(scales).toEqual([1, 1, 200 / 72, 200 / 72])
+  })
+
+  it('streams pages and cleans up each one, bounding a corrupt huge page', async () => {
+    const cleanups: number[] = []
+    const viewports: Array<{ width: number; height: number }> = [
+      { width: 612, height: 792 },
+      { width: Number.NaN, height: Number.NaN },
+      { width: 1e6, height: 1e6 },
+    ]
+    const getPage = vi.fn(async (n: number) => {
+      const vp = viewports[n - 1]!
+      return {
+        getViewport: vi.fn(({ scale }: { scale: number }) => ({
+          width: vp.width * scale,
+          height: vp.height * scale,
+        })),
+        render: vi.fn(() => ({ promise: Promise.resolve() })),
+        cleanup: vi.fn(() => cleanups.push(1)),
+      }
+    })
+    const doc = { numPages: 3, getPage } as unknown as PDFDocumentProxy
+    // The print root is removed on afterprint, so snapshot the image count
+    // at print time like the other tests do.
+    let imgsAtPrintTime = 0
+    ;(window.print as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      imgsAtPrintTime = document.querySelectorAll('.pdf-print-root img').length
+      window.dispatchEvent(new Event('afterprint'))
+    })
+    await printPdf(doc)
+    // each page cleaned up twice: once after measure, once after render/skip
+    expect(cleanups).toHaveLength(6)
+    // NaN pages are skipped and huge pages render at their own reduced scale
+    // rather than aborting the whole print
+    expect(imgsAtPrintTime).toBe(2)
   })
 })

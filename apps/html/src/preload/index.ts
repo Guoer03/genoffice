@@ -4,11 +4,15 @@ import type { Lang } from '@genoffice/i18n'
 import type { AiStreamChunk } from '@genoffice/ai-provider'
 import type { ProjectApi } from '@genoffice/project-store'
 import { installDropOpenBridge } from '@genoffice/electron-utils/drop-open'
+import { installFilesPaneBridge } from '@genoffice/electron-utils/files-pane-bridge'
 import { AI_CHANNELS, HTML_CHANNELS } from '../shared/ipc'
 import type { AutoSaveDefault, ExportFormat, HtmlApi, SaveMode, UiTheme } from '../shared/ipc'
 
 const api: HtmlApi = {
   consumePending: () => ipcRenderer.invoke(HTML_CHANNELS.consumePending),
+  consumeHeadlessExport: () => ipcRenderer.invoke(HTML_CHANNELS.consumeHeadlessExport),
+  headlessExportDone: (result: { ok: boolean; error?: string }) =>
+    ipcRenderer.send(HTML_CHANNELS.headlessExportDone, result),
   readFile: (path) => ipcRenderer.invoke(HTML_CHANNELS.readFile, path),
   updatePreview: (text) => ipcRenderer.send(HTML_CHANNELS.previewUpdate, text),
   getPreviewInfo: () => ipcRenderer.invoke(HTML_CHANNELS.previewInfo),
@@ -56,6 +60,7 @@ const api: HtmlApi = {
   },
   exportDocx: (request) => ipcRenderer.invoke(HTML_CHANNELS.exportDocx, request),
   exportPdf: (request) => ipcRenderer.invoke(HTML_CHANNELS.exportPdf, request),
+  exportHtml: (request) => ipcRenderer.invoke(HTML_CHANNELS.exportHtml, request),
   getLanguage: () => ipcRenderer.invoke(HTML_CHANNELS.getLanguage),
   onLanguageChanged: (handler) => {
     const listener = (_e: Electron.IpcRendererEvent, lang: Lang) => handler(lang)
@@ -127,3 +132,5 @@ contextBridge.exposeInMainWorld('projectApi', projectApi)
 
 // open documents dragged from the OS onto this tab as a new shell tab
 installDropOpenBridge()
+// folder tree over the default save folder (Files pane)
+installFilesPaneBridge()

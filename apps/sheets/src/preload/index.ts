@@ -52,6 +52,7 @@ import {
   SAVE_EDITS_CHUNK_JSON_MAX,
 } from '../shared/ipc-channels'
 import { installDropOpenBridge } from '@genoffice/electron-utils/drop-open'
+import { installFilesPaneBridge } from '@genoffice/electron-utils/files-pane-bridge'
 
 const desktopApi: DesktopApi = {
   getLanguage: () => ipcRenderer.invoke('app:get-language'),
@@ -274,33 +275,7 @@ const desktopApi: DesktopApi = {
     return result as { renamed: boolean; name?: string }
   },
   async exportPdf(request) {
-    if (
-      !isRecord(request) ||
-      typeof request.fileName !== 'string' ||
-      request.fileName.length === 0 ||
-      request.fileName.length > 255 ||
-      typeof request.html !== 'string' ||
-      request.html.length === 0 ||
-      request.html.length > 20_000_000 ||
-      typeof request.landscape !== 'boolean' ||
-      !isPdfPageSize(request.pageSize) ||
-      !isRecord(request.margins) ||
-      !['top', 'bottom', 'left', 'right'].every((edge) => {
-        const value = (request.margins as Record<string, unknown>)[edge]
-        return typeof value === 'number' && value >= 0 && value <= 3
-      }) ||
-      typeof request.scale !== 'number' ||
-      request.scale < 0.1 ||
-      request.scale > 2 ||
-      (request.headerTemplate !== undefined &&
-        !isBoundedString(request.headerTemplate, MAX_PDF_TEMPLATE_CHARS)) ||
-      (request.footerTemplate !== undefined &&
-        !isBoundedString(request.footerTemplate, MAX_PDF_TEMPLATE_CHARS)) ||
-      (request.firstPage !== undefined && !isPdfPageVariant(request.firstPage)) ||
-      (request.evenPages !== undefined && !isPdfPageVariant(request.evenPages))
-    ) {
-      throw new Error('Invalid PDF export request.')
-    }
+    if (!isPdfExportRequest(request)) throw new Error('Invalid PDF export request.')
     const result: unknown = await ipcRenderer.invoke(IPC_CHANNELS.exportPdf, request)
     if (
       !isRecord(result) ||
@@ -310,6 +285,18 @@ const desktopApi: DesktopApi = {
       throw new Error('Invalid PDF export response.')
     }
     return result as { canceled: true } | { canceled: false; path: string }
+  },
+  async printWorkbook(request) {
+    if (!isPdfExportRequest(request)) throw new Error('Invalid print request.')
+    const result: unknown = await ipcRenderer.invoke(IPC_CHANNELS.printWorkbook, request)
+    if (
+      !isRecord(result) ||
+      typeof result.ok !== 'boolean' ||
+      (result.error !== undefined && typeof result.error !== 'string')
+    ) {
+      throw new Error('Invalid print response.')
+    }
+    return result as { ok: true } | { ok: false; error?: string }
   },
   async exportCsv(request) {
     if (
@@ -399,6 +386,7 @@ const desktopApi: DesktopApi = {
         action === 'open' ||
         action === 'save' ||
         action === 'save-as' ||
+        action === 'print' ||
         action === 'export-pdf' ||
         action === 'export-csv' ||
         action === 'undo' ||
@@ -548,6 +536,16 @@ const desktopApi: DesktopApi = {
     const result: unknown = await ipcRenderer.invoke('sheets:has-queued-workbook')
     return result === true
   },
+  async consumeHeadlessExport() {
+    const result: unknown = await ipcRenderer.invoke('sheets:consume-headless-export')
+    return typeof result === 'string' ? result : null
+  },
+  headlessExportDone(result) {
+    ipcRenderer.send('sheets:headless-export-done', {
+      ok: result.ok === true,
+      ...(typeof result.error === 'string' ? { error: result.error } : {}),
+    })
+  },
   async pickAttachments() {
     const result: unknown = await ipcRenderer.invoke(IPC_CHANNELS.filesPick)
     return result === null ? null : parseAttachmentAddResult(result)
@@ -662,13 +660,6 @@ const projectApi: ProjectApi = {
   appendChat: (args) => ipcRenderer.invoke('project:appendChat', args),
   loadChat: (args) => ipcRenderer.invoke('project:loadChat', args),
   rebindChat: (args) => ipcRenderer.invoke('project:rebindChat', args),
-  // P1 extensions
-  listProjects: () => ipcRenderer.invoke('project:list'),
-  createProject: (args) => ipcRenderer.invoke('project:create', args),
-  renameProject: (args) => ipcRenderer.invoke('project:rename', args),
-  deleteProject: (args) => ipcRenderer.invoke('project:delete', args),
-  moveFile: (args) => ipcRenderer.invoke('project:moveFile', args),
-  getTimeline: (args) => ipcRenderer.invoke('project:timeline', args),
 }
 contextBridge.exposeInMainWorld('projectApi', projectApi)
 
@@ -681,6 +672,8 @@ if (process.env.GENOFFICE_DEBUG_HOOKS === '1') {
 
 // open documents dragged from the OS onto this tab as a new shell tab
 installDropOpenBridge()
+// folder tree over the default save folder (Files pane)
+installFilesPaneBridge()
 
 function parseWorkbookFile(input: unknown): WorkbookFile {
   if (!isRecord(input)) throw new Error('Invalid workbook response.')
@@ -922,6 +915,7 @@ function parseWorkbookFile(input: unknown): WorkbookFile {
       // Degrade instead of rejecting the workbook: 0 / malformed defaults
       // mean "use the built-in size".
       defaultRowHeight: normalizedDefaultSize(sheet.defaultRowHeight),
+      ...(sheet.defaultRowHeightFixed === true ? { defaultRowHeightFixed: true } : {}),
       defaultColumnWidth: normalizedDefaultSize(sheet.defaultColumnWidth),
       baseColumnWidth: normalizedDefaultSize(sheet.baseColumnWidth),
       freeze: parseFreeze(sheet.freeze),
@@ -1172,6 +1166,7 @@ function parseRecalcResult(input: unknown): WorkbookRecalcResult {
       typeof cell.formatted !== 'string' ||
       (cell.number !== undefined &&
         (typeof cell.number !== 'number' || !Number.isFinite(cell.number))) ||
+      (cell.isError !== undefined && typeof cell.isError !== 'boolean') ||
       typeof cell.isFormula !== 'boolean'
     ) {
       throw new Error('Invalid workbook recalc response.')
@@ -1182,6 +1177,7 @@ function parseRecalcResult(input: unknown): WorkbookRecalcResult {
       column: cell.column,
       formatted: cell.formatted,
       ...(cell.number === undefined ? {} : { number: cell.number }),
+      ...(cell.isError ? { isError: true } : {}),
       isFormula: cell.isFormula,
     }
   })
@@ -1691,7 +1687,7 @@ function isOptionalBarLength(value: unknown): value is number | undefined {
 function parseSaveRequest(input: WorkbookSaveRequest): WorkbookSaveRequest {
   // Every rejection names the failing part: this one message ends up in the
   // save-failure toast, and "Invalid workbook save request." alone gave user
-  // reports nothing to go on (alpha ledger r110).
+  // reports nothing to go on.
   const invalid = (detail: string): never => {
     throw new Error(`Invalid workbook save request. (${detail})`)
   }
@@ -2225,6 +2221,36 @@ function isFilterColumn(input: unknown): boolean {
     }
   }
   return input.values !== undefined || input.blank !== undefined || input.customs !== undefined
+}
+
+/** Shape check shared by PDF export and print: both send the laid-out sheet with its page setup. */
+function isPdfExportRequest(request: unknown): boolean {
+  return !(
+    !isRecord(request) ||
+    typeof request.fileName !== 'string' ||
+    request.fileName.length === 0 ||
+    request.fileName.length > 255 ||
+    typeof request.html !== 'string' ||
+    request.html.length === 0 ||
+    request.html.length > 20_000_000 ||
+    typeof request.landscape !== 'boolean' ||
+    !isPdfPageSize(request.pageSize) ||
+    !isRecord(request.margins) ||
+    !['top', 'bottom', 'left', 'right'].every((edge) => {
+      const value = (request.margins as Record<string, unknown>)[edge]
+      return typeof value === 'number' && value >= 0 && value <= 3
+    }) ||
+    typeof request.scale !== 'number' ||
+    request.scale < 0.1 ||
+    request.scale > 2 ||
+    (request.headerTemplate !== undefined &&
+      !isBoundedString(request.headerTemplate, MAX_PDF_TEMPLATE_CHARS)) ||
+    (request.footerTemplate !== undefined &&
+      !isBoundedString(request.footerTemplate, MAX_PDF_TEMPLATE_CHARS)) ||
+    (request.firstPage !== undefined && !isPdfPageVariant(request.firstPage)) ||
+    (request.evenPages !== undefined && !isPdfPageVariant(request.evenPages)) ||
+    (request.outPath !== undefined && !isBoundedString(request.outPath, 4096))
+  )
 }
 
 function isPdfPageSize(input: unknown): boolean {
@@ -3018,6 +3044,14 @@ function parseShapeParagraphs(input: unknown): NonNullable<WorkbookVisualObject[
     if (
       !isRecord(paragraph) ||
       !isOptionalString(paragraph.align) ||
+      !isOptionalFiniteNumber(paragraph.marginLeft) ||
+      !isOptionalFiniteNumber(paragraph.indent) ||
+      !isOptionalString(paragraph.bulletScheme) ||
+      (paragraph.bulletStartAt !== undefined &&
+        (typeof paragraph.bulletStartAt !== 'number' ||
+          !Number.isInteger(paragraph.bulletStartAt) ||
+          paragraph.bulletStartAt < 0)) ||
+      !isOptionalString(paragraph.bulletChar) ||
       !Array.isArray(paragraph.runs)
     ) {
       throw new Error('Invalid workbook shape paragraph.')
@@ -3030,10 +3064,13 @@ function parseShapeParagraphs(input: unknown): NonNullable<WorkbookVisualObject[
         (run.bold !== undefined && typeof run.bold !== 'boolean') ||
         (run.italic !== undefined && typeof run.italic !== 'boolean') ||
         (run.underline !== undefined && typeof run.underline !== 'boolean') ||
-        (run.size !== undefined && (typeof run.size !== 'number' || !Number.isFinite(run.size)))
+        (run.size !== undefined && (typeof run.size !== 'number' || !Number.isFinite(run.size))) ||
+        (run.caps !== undefined && run.caps !== 'all' && run.caps !== 'small')
       ) {
         throw new Error('Invalid workbook shape run.')
       }
+      const caps: 'all' | 'small' | undefined =
+        run.caps === 'all' || run.caps === 'small' ? run.caps : undefined
       return {
         text: run.text,
         ...(run.color === undefined ? {} : { color: run.color }),
@@ -3041,10 +3078,16 @@ function parseShapeParagraphs(input: unknown): NonNullable<WorkbookVisualObject[
         ...(run.italic === undefined ? {} : { italic: run.italic }),
         ...(run.underline === undefined ? {} : { underline: run.underline }),
         ...(run.size === undefined ? {} : { size: run.size }),
+        ...(caps === undefined ? {} : { caps }),
       }
     })
     return {
       ...(paragraph.align === undefined ? {} : { align: paragraph.align }),
+      ...(paragraph.marginLeft === undefined ? {} : { marginLeft: paragraph.marginLeft }),
+      ...(paragraph.indent === undefined ? {} : { indent: paragraph.indent }),
+      ...(paragraph.bulletScheme === undefined ? {} : { bulletScheme: paragraph.bulletScheme }),
+      ...(paragraph.bulletStartAt === undefined ? {} : { bulletStartAt: paragraph.bulletStartAt }),
+      ...(paragraph.bulletChar === undefined ? {} : { bulletChar: paragraph.bulletChar }),
       runs,
     }
   })
@@ -3108,7 +3151,9 @@ function parseChart(input: unknown): NonNullable<WorkbookVisualObject['chart']> 
     !isOptionalFiniteNumber(input.gapWidthPct) ||
     !isOptionalFiniteNumber(input.holeSizePct) ||
     (input.lineMarkers !== undefined && typeof input.lineMarkers !== 'boolean') ||
-    !isOptionalEnum(input.dispBlanksAs, CHART_DISP_BLANKS)
+    !isOptionalEnum(input.dispBlanksAs, CHART_DISP_BLANKS) ||
+    !isOptionalString(input.chartAreaFill) ||
+    !isOptionalString(input.plotAreaFill)
   ) {
     throw new Error('Invalid workbook chart response.')
   }
@@ -3118,6 +3163,7 @@ function parseChart(input: unknown): NonNullable<WorkbookVisualObject['chart']> 
   const yAxis = parseChartAxisInfo(input.yAxis)
   const secondaryYAxis = parseChartAxisInfo(input.secondaryYAxis)
   const titleStyle = parseChartTitleStyle(input.titleStyle)
+  const dataLabelStyle = parseChartTitleStyle(input.dataLabelStyle)
   if (!isOptionalString(input.scatterStyle)) {
     throw new Error('Invalid workbook chart response.')
   }
@@ -3204,9 +3250,12 @@ function parseChart(input: unknown): NonNullable<WorkbookVisualObject['chart']> 
     ...(yAxis === undefined ? {} : { yAxis }),
     ...(secondaryYAxis === undefined ? {} : { secondaryYAxis }),
     ...(titleStyle === undefined ? {} : { titleStyle }),
+    ...(dataLabelStyle === undefined ? {} : { dataLabelStyle }),
     ...(input.scatterStyle === undefined ? {} : { scatterStyle: input.scatterStyle }),
     ...(input.lineMarkers === undefined ? {} : { lineMarkers: input.lineMarkers }),
     ...(input.dispBlanksAs === undefined ? {} : { dispBlanksAs: input.dispBlanksAs }),
+    ...(input.chartAreaFill === undefined ? {} : { chartAreaFill: input.chartAreaFill }),
+    ...(input.plotAreaFill === undefined ? {} : { plotAreaFill: input.plotAreaFill }),
   }
 }
 
@@ -3229,6 +3278,10 @@ function parseChartTitleStyle(
   }
 }
 
+function isOptionalAxisSide(value: unknown): value is 'l' | 'r' | 't' | 'b' | undefined {
+  return value === undefined || value === 'l' || value === 'r' || value === 't' || value === 'b'
+}
+
 function parseChartAxisInfo(input: unknown):
   | {
       title?: string
@@ -3239,6 +3292,13 @@ function parseChartAxisInfo(input: unknown):
       majorGridlines: boolean
       hidden: boolean
       reversed: boolean
+      position?: 'l' | 'r' | 't' | 'b'
+      labelSize?: number
+      labelColor?: string
+      titleSize?: number
+      titleColor?: string
+      displayUnit?: number
+      displayUnitLabel?: string
     }
   | undefined {
   if (input === undefined) return undefined
@@ -3251,7 +3311,14 @@ function parseChartAxisInfo(input: unknown):
     !isOptionalString(input.numFmt) ||
     typeof input.majorGridlines !== 'boolean' ||
     (input.hidden !== undefined && typeof input.hidden !== 'boolean') ||
-    (input.reversed !== undefined && typeof input.reversed !== 'boolean')
+    (input.reversed !== undefined && typeof input.reversed !== 'boolean') ||
+    !isOptionalAxisSide(input.position) ||
+    !isOptionalFiniteNumber(input.labelSize) ||
+    !isOptionalString(input.labelColor) ||
+    !isOptionalFiniteNumber(input.titleSize) ||
+    !isOptionalString(input.titleColor) ||
+    !isOptionalFiniteNumber(input.displayUnit) ||
+    !isOptionalString(input.displayUnitLabel)
   ) {
     throw new Error('Invalid workbook chart axis.')
   }
@@ -3264,6 +3331,13 @@ function parseChartAxisInfo(input: unknown):
     majorGridlines: input.majorGridlines,
     hidden: input.hidden === true,
     reversed: input.reversed === true,
+    ...(input.position === undefined ? {} : { position: input.position }),
+    ...(input.labelSize === undefined ? {} : { labelSize: input.labelSize }),
+    ...(input.labelColor === undefined ? {} : { labelColor: input.labelColor }),
+    ...(input.titleSize === undefined ? {} : { titleSize: input.titleSize }),
+    ...(input.titleColor === undefined ? {} : { titleColor: input.titleColor }),
+    ...(input.displayUnit === undefined ? {} : { displayUnit: input.displayUnit }),
+    ...(input.displayUnitLabel === undefined ? {} : { displayUnitLabel: input.displayUnitLabel }),
   }
 }
 

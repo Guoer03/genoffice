@@ -1,4 +1,4 @@
-import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist'
+import type { PDFDocumentProxy } from 'pdfjs-dist'
 
 /** Baseline raster density (previous behavior — quality never drops below this). */
 const BASE_DPI = 150
@@ -21,8 +21,9 @@ const MAX_PRINT_PIXELS = 150_000_000
 export function printScaleForAreas(areas: number[]): number {
   const target = TARGET_DPI / 72
   const total = areas.reduce((sum, area) => sum + area, 0)
-  if (!(total > 0)) return target
+  if (!(total > 0) || !Number.isFinite(total)) return target
   const atTarget = total * target * target
+  if (!Number.isFinite(atTarget) || atTarget <= 0) return target
   if (atTarget <= MAX_PRINT_PIXELS) return target
   return Math.max(BASE_DPI / 72, target * Math.sqrt(MAX_PRINT_PIXELS / atTarget))
 }
@@ -41,27 +42,71 @@ export async function printPdf(doc: PDFDocumentProxy, pages?: number[]): Promise
   const root = document.createElement('div')
   root.className = 'pdf-print-root'
   const canvas = document.createElement('canvas')
+  // Integer-only: a float (1.5) passes the range check but pdf.js getPage
+  // throws on it, aborting the whole job in the measure pass below.
   const targets =
     pages && pages.length > 0
-      ? [...new Set(pages)].filter((n) => n >= 1 && n <= doc.numPages).sort((a, b) => a - b)
+      ? [...new Set(pages)]
+          .filter((n) => Number.isInteger(n) && n >= 1 && n <= doc.numPages)
+          .sort((a, b) => a - b)
       : Array.from({ length: doc.numPages }, (_x, i) => i + 1)
-  const fetched: PDFPageProxy[] = []
+  // First pass: measure each page at unit scale to budget the shared scale.
+  // Stream one page at a time so no PDFPageProxy outlives its render — the
+  // previous two-pass held all pages alive plus 2× viewports.
   const areas: number[] = []
   for (const n of targets) {
     const page = await doc.getPage(n)
-    fetched.push(page)
-    const unit = page.getViewport({ scale: 1 })
-    areas.push(unit.width * unit.height)
+    try {
+      const unit = page.getViewport({ scale: 1 })
+      const area = unit.width * unit.height
+      areas.push(Number.isFinite(area) && area > 0 ? area : 0)
+    } finally {
+      try {
+        page.cleanup()
+      } catch {
+        /* older pdf.js without cleanup */
+      }
+    }
   }
   const scale = printScaleForAreas(areas)
-  for (const page of fetched) {
-    const viewport = page.getViewport({ scale })
-    canvas.width = Math.floor(viewport.width)
-    canvas.height = Math.floor(viewport.height)
-    await page.render({ canvas, viewport }).promise
-    const img = document.createElement('img')
-    img.src = canvas.toDataURL('image/jpeg', 0.92)
-    root.appendChild(img)
+  // Second pass: render at the budgeted scale, bounding each canvas to the
+  // pixel budget so a single huge drawing (e.g. 200in² at 150 DPI → >1Bpx)
+  // cannot OOM the renderer even at the floor scale.
+  const MAX_PAGE_PIXELS = MAX_PRINT_PIXELS
+  for (const n of targets) {
+    const page = await doc.getPage(n)
+    try {
+      let viewport = page.getViewport({ scale })
+      let w = Math.floor(viewport.width)
+      let h = Math.floor(viewport.height)
+      if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) {
+        // Skip a single corrupt page rather than aborting the whole print.
+        continue
+      }
+      if (w * h > MAX_PAGE_PIXELS) {
+        // A missing page is worse than a softer one: render this page at its
+        // own reduced scale instead of dropping it.
+        const pageScale = scale * Math.sqrt(MAX_PAGE_PIXELS / (w * h))
+        viewport = page.getViewport({ scale: pageScale })
+        w = Math.floor(viewport.width)
+        h = Math.floor(viewport.height)
+        if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) {
+          continue
+        }
+      }
+      canvas.width = w
+      canvas.height = h
+      await page.render({ canvas, viewport }).promise
+      const img = document.createElement('img')
+      img.src = canvas.toDataURL('image/jpeg', 0.92)
+      root.appendChild(img)
+    } finally {
+      try {
+        page.cleanup()
+      } catch {
+        /* older pdf.js without cleanup */
+      }
+    }
   }
   canvas.width = 0
   canvas.height = 0

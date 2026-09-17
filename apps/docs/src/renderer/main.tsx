@@ -7,15 +7,21 @@ import '@genoffice/ui/tokens.css'
 import '@genoffice/ui/screentip.css'
 import '@genoffice/ui/color-picker.css'
 import '@genoffice/ui/dropdown.css'
+import '@genoffice/ui/files-pane.css'
 import '@genoffice/ui/ribbon-collapse.css'
 import '@genoffice/ui/markdown.css'
 import '@genoffice/ui/ai-panel-prefs.css'
 import '@genoffice/ui/ai-scope-quote.css'
+import '@genoffice/ui/image-viewer.css'
 import './styles.css'
 import './fonts/fonts.css'
 import { applyAiPanelPrefs, installScreenTips } from '@genoffice/ui'
+import { setAltChunkHtmlConverter } from '@genoffice/docx-engine'
 
 installScreenTips()
+if (window.desktop?.convertAltChunkHtml) {
+  setAltChunkHtmlConverter((html) => window.desktop.convertAltChunkHtml(html))
+}
 
 function applyTheme(theme: UiTheme): void {
   if (theme === 'system') document.documentElement.removeAttribute('data-theme')

@@ -120,6 +120,9 @@ describe('parseDocx', () => {
         '<w:style w:type="paragraph" w:styleId="MySub"><w:name w:val="My Sub"/><w:basedOn w:val="Heading2"/></w:style>' +
         // Word's TOCHeading pattern: basedOn Heading1 but outlineLvl 9 = body text
         '<w:style w:type="paragraph" w:styleId="TOCHeading"><w:name w:val="TOC Heading"/><w:basedOn w:val="Heading1"/>' +
+        '<w:pPr><w:outlineLvl w:val="9"/></w:pPr></w:style>' +
+        // outline-off root style: no basedOn to resolve, the flag must still be set
+        '<w:style w:type="paragraph" w:styleId="Caption"><w:name w:val="caption"/>' +
         '<w:pPr><w:outlineLvl w:val="9"/></w:pPr></w:style>',
       bodyXml: [
         p('<w:pStyle w:val="Heading1"/>', 'h1 via built-in style'),
@@ -145,6 +148,11 @@ describe('parseDocx', () => {
       ['paragraph', undefined],
       ['paragraph', undefined],
     ])
+    expect(doc.styles.get('TOCHeading')).toMatchObject({ headingOutlineOff: true })
+    expect(doc.styles.get('TOCHeading')?.headingLevel).toBeUndefined()
+    expect(doc.styles.get('Caption')).toMatchObject({ headingOutlineOff: true })
+    expect(doc.styles.get('Caption')?.headingLevel).toBeUndefined()
+    expect(doc.styles.get('MySub')).toMatchObject({ headingLevel: 2, headingLevelInherited: true })
   })
 })
 
@@ -199,6 +207,36 @@ describe('empty paragraph line size', () => {
     expect(doc.blocks[1].runs).toEqual([])
     expect(doc.blocks[1].format?.emptyRunSizeHalfPoints).toBe(2)
     expect(doc.blocks[2].format?.emptyRunSizeHalfPoints).toBe(16)
+  })
+
+  // Word probe 2026-09-11: a space-only paragraph lays out like an empty one,
+  // sized by the paragraph mark; the space run's own size never counts
+  it('a space-only paragraph takes the mark rPr only, never the space run', async () => {
+    const space = '<w:r><w:rPr><w:sz w:val="8"/></w:rPr><w:t xml:space="preserve"> </w:t></w:r>'
+    const bodyXml =
+      `<w:p>${space}</w:p>` +
+      `<w:p><w:pPr><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:sz w:val="8"/></w:rPr></w:pPr>${space}</w:p>` +
+      '<w:p><w:r><w:rPr><w:sz w:val="8"/></w:rPr><w:t xml:space="preserve"> x</w:t></w:r></w:p>'
+    const doc = await parseDocx(await buildDocx({ bodyXml }))
+    expect(doc.blocks[0]?.runs?.map((r) => r.text)).toEqual([' '])
+    expect(doc.blocks[0].format?.emptyRunSizeHalfPoints).toBeUndefined()
+    expect(doc.blocks[0].format?.emptyRunFontFamily).toBeUndefined()
+    expect(doc.blocks[1].format?.emptyRunSizeHalfPoints).toBe(8)
+    expect(doc.blocks[1].format?.emptyRunFontFamily).toBe('Arial')
+    expect(doc.blocks[2].format?.emptyRunSizeHalfPoints).toBeUndefined()
+  })
+
+  it('a space-only textbox paragraph records its mark w:sz too', async () => {
+    const space = '<w:r><w:rPr><w:sz w:val="8"/></w:rPr><w:t xml:space="preserve"> </w:t></w:r>'
+    const txbx =
+      '<w:p><w:r><w:pict><v:shape id="s1" style="width:100pt;height:40pt"><v:textbox><w:txbxContent>' +
+      `<w:p><w:pPr><w:rPr><w:sz w:val="8"/></w:rPr></w:pPr>${space}</w:p><w:p>${space}</w:p>` +
+      '</w:txbxContent></v:textbox></v:shape></w:pict></w:r></w:p>'
+    const doc = await parseDocx(await buildDocx({ bodyXml: txbx }))
+    const boxes = doc.blocks.flatMap((b) => b.textboxes ?? [])
+    expect(boxes.length).toBe(1)
+    expect(boxes[0]?.paras[0]?.emptyRunSizeHalfPoints).toBe(8)
+    expect(boxes[0]?.paras[1]?.emptyRunSizeHalfPoints).toBeUndefined()
   })
 
   it('records the w:rFonts that faces a run-less paragraph', async () => {

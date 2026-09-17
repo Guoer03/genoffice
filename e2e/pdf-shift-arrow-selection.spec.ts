@@ -30,7 +30,7 @@ function twoRunTextPdf(): Buffer {
 
 /**
  * Regression for "Shift+→ cannot extend the selection over the trailing
- * digits" (alpha feedback): the viewer's window keydown handler mapped
+ * digits" (user report): the viewer's window keydown handler mapped
  * ArrowRight to a page flip and preventDefault-ed it without checking
  * shiftKey, so the browser's native selection extension never ran. With a
  * non-collapsed selection present, Shift+navigation must reach the browser.
@@ -46,7 +46,7 @@ test('Shift+ArrowRight extends the text selection instead of flipping the page',
     openFile: pdfPath,
   })
   try {
-    const editorPage = await waitForPageWithUrl(launched.app, 'pdf/out')
+    const editorPage = await waitForPageWithUrl(launched.app, '://pdf/')
     await expect(editorPage.locator('.textLayer span').first()).toBeVisible({ timeout: 30_000 })
 
     // select up to "...000003", like a finished mouse drag that stopped short

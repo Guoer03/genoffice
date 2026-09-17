@@ -23,6 +23,8 @@ Fail Word, Excel, PowerPoint dan PDF, disunting oleh anda dan AI anda, disimpan 
 
 <p align="center">
   <a href="#download"><b>Muat Turun</b></a> ·
+  <a href="#command-line-and-agent-skill"><b>CLI</b></a> ·
+  <a href="#mcp-server"><b>MCP</b></a> ·
   <a href="https://genoffice.ai/"><b>Laman Web</b></a> ·
   <a href="https://genoffice.ai/join"><b>Komuniti</b></a> ·
   <a href="../../PRIVACY.md"><b>Privasi</b></a>
@@ -52,6 +54,11 @@ kepada anda dengan tepat apa yang disentuhnya.
   OpenAI, Gemini, DeepSeek, Kimi, GLM, Qwen, Doubao, MiniMax, Grok, Mistral,
   OpenRouter, Requesty, atau mana-mana titik akhir yang serasi dengan OpenAI, termasuk
   pelayan setempat.
+- **Boleh dijalankan melalui skrip dan sedia untuk agen.** Aplikasi ini
+  disertakan dengan baris arahan `genoffice` dan skill untuk Claude Code,
+  Codex, Cursor, Gemini CLI, GitHub Copilot, OpenCode dan Windsurf, jadi agen
+  pengekodan boleh mencipta, menukar, membaca dan menyunting fail Office
+  sebenar pada mesin anda tanpa membuka sebarang tetingkap.
 
 **Dapatkan:** [macOS](https://github.com/genspark-ai/genoffice/releases/latest) (Apple Silicon dan Intel) ·
 [Windows](https://github.com/genspark-ai/genoffice/releases/latest) (x64 dan Arm) ·
@@ -60,8 +67,9 @@ butiran dan keperluan dalam [Muat Turun](#download).
 
 ## Demo
 
-Enam aplikasi, satu panel AI. Setiap tangkapan skrin ialah aplikasi sebenar
-pada macOS, dengan AI dipandu oleh gesaan yang boleh anda baca dalam panel.
+Enam aplikasi, satu panel AI, dan satu baris arahan untuk agen pengekodan anda.
+Setiap tangkapan skrin ialah aplikasi sebenar pada macOS, dengan AI dipandu
+oleh gesaan yang boleh anda baca dalam panel.
 
 ### 1 · Docs — buka dan sunting `.docx` dengan AI yang boleh anda semak
 
@@ -159,6 +167,49 @@ gaya — sebelum membina satu fail `.html` mandiri berdasarkan token-token itu.
 </tr>
 </table>
 
+### 7 · CLI — agen pengekodan anda memandu GenOffice, pada mesin anda
+
+GenOffice disertakan dengan baris arahan `genoffice` dan skill agen. Pasang
+skill itu dan Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot, OpenCode
+atau Windsurf boleh mencipta, menukar, membaca dan menyunting fail Office
+sebenar melalui enjin yang sama seperti aplikasi, tanpa membuka sebarang
+tetingkap.
+
+<img src="../assets/readme/cli-deck-in-app.webp" alt="GenOffice Slides memaparkan deck Sistem Suria lapan slaid yang dibina oleh agen pengekodan melalui baris arahan genoffice: slaid muka depan pada kanvas, lapan lakaran kecil di kiri dan panel AI terbuka" width="100%">
+
+<table>
+<tr>
+<td width="50%"><img src="../assets/readme/cli-slides-grid.webp" alt="Lapan slaid deck Sistem Suria yang telah dipaparkan bersebelahan: muka depan, garis masa penerokaan, empat angka utama, carta bar diameter planet, dunia berbatu lawan gergasi, angka utama 99.8% milik Matahari, grid empat gergasi dan rumusan"></td>
+<td width="50%"><img src="../assets/readme/cli-integrations.webp" alt="GenOffice Settings, halaman Integrations: skill genoffice dipasang ke dalam Claude Code, dengan butang Install di sebelah Codex dan Cursor"></td>
+</tr>
+<tr>
+<td><b>Satu gesaan kepada agen anda</b> — "Build an eight-slide deck about the Solar System." Agen membaca skill, menulis helaian gaya, rangka dan satu spesifikasi halaman bagi setiap slaid, menjana dua foto dengan <code>genoffice image</code>, dan membiarkan <code>genoffice slides check</code> menolak apa-apa yang melimpah atau bertindih sebelum <code>genoffice create</code> memasang <code>.pptx</code> dan <code>slides render</code> memulangkan satu PNG bagi setiap slaid untuk dilihat.</td>
+<td><b>Pasang sekali, daripada Tetapan → Integrasi</b> — GenOffice menyenaraikan agen pengekodan yang ditemuinya pada komputer ini dan menulis skill ke dalam setiap satu yang anda pilih. Atau muat turun skill sebagai zip, atau jalankan <code>npx skills add genspark-ai/genoffice</code>. Arahan dan aliran kerja penuh ada dalam <a href="#command-line-and-agent-skill">Baris arahan dan skill agen</a>.</td>
+</tr>
+</table>
+
+### 8 · MCP — alat yang sama melalui Model Context Protocol
+
+Setiap arahan `genoffice` turut menjadi alat MCP. Claude Code, Claude
+Desktop, Cursor dan mana-mana klien MCP lain boleh memulakan `genoffice
+mcp` sendiri, tanpa perlu memasang skill dan tanpa membuka tetingkap, lalu
+mendapat 29 alat serta rujukan operasi sebagai sumber (resources). Pelayan
+HTTP kedua di dalam aplikasi membolehkan agen membina dokumen Word dalam
+tab editor yang kelihatan sementara anda memerhati.
+
+<img src="../assets/readme/mcp-deck-motion.webp" alt="Rakaman time-lapse Claude Code membina taklimat pelabur lapan slaid tentang tenaga boleh diperbaharui melalui pelayan MCP genoffice: mencari rajah dan foto, menyemak setiap gambar calon dengan media, deck_start menulis helaian gaya dan rangka, deck_page menambah satu halaman yang disemak pada satu masa, deck_build memasang .pptx dan slides_render memulangkan gambar setiap slaid; deck yang siap kemudian dibuka dalam GenOffice Slides" width="100%">
+
+<table>
+<tr>
+<td width="50%"><img src="../assets/readme/mcp-deck-in-app.webp" alt="GenOffice Slides memaparkan deck Renewable Energy 2026 lapan slaid yang dibina Claude Code melalui pelayan MCP genoffice: slaid muka depan dengan foto ladang angin pada kanvas dan lapan lakaran kecil di kiri"></td>
+<td width="50%"><img src="../assets/readme/mcp-integrations.webp" alt="GenOffice Settings, halaman Integrations, bahagian MCP: arahan satu baris claude mcp add untuk Claude Code, blok JSON untuk Cursor, Claude Desktop dan klien MCP lain, serta pilihan pelayan HTTP tempatan di bawah"></td>
+</tr>
+<tr>
+<td><b>Satu gesaan, 38 panggilan alat, tanpa shell</b> — "Bina taklimat pelabur lapan slaid tentang tenaga boleh diperbaharui pada 2026, dengan foto sebenar pada muka depan dan di mana-mana sahaja foto membantu." Agen menarik rajah dan foto menggunakan <code>search</code>, bertanya kepada <code>media</code> sama ada setiap gambar calon adalah foto sebenar, memanggil <code>deck_start</code> dengan helaian gaya dan rangka, kemudian <code>deck_page</code> bagi setiap slaid; setiap halaman disemak berbanding rangka dan palet sebelum disimpan, <code>deck_build</code> memasang <code>.pptx</code>, <code>slides_audit</code> mencari limpahan, <code>slides_render</code> memulangkan PNG bagi setiap slaid sebagai kandungan imej yang boleh dilihat model, dan <code>deck_replace</code> membetulkan tiga halaman yang tidak disukainya.</td>
+<td><b>Sambung sekali, daripada Tetapan → Integrasi</b> — salin baris <code>claude mcp add</code> untuk Claude Code, atau blok JSON ke dalam Cursor, Claude Desktop atau mana-mana klien MCP lain. Pilihan B menghidupkan pelayan HTTP tempatan untuk editor Word yang kelihatan. Kedua-duanya diterangkan dalam <a href="#mcp-server">Pelayan MCP</a>.</td>
+</tr>
+</table>
+
 ## Mengapa GenOffice
 
 - **Sumber terbuka**, Apache-2.0, dibangunkan secara terbuka di GitHub.
@@ -178,6 +229,9 @@ gaya — sebelum membina satu fail `.html` mandiri berdasarkan token-token itu.
   sistem untuk hasil imbasan.
 - **Markdown dan HTML juga**, dengan panel AI yang sama dan eksport setempat
   ke Word.
+- **Boleh dijalankan melalui skrip.** Baris arahan `genoffice`, skill agen
+  dan pelayan MCP meletakkan setiap enjin di bawah khidmat Claude Code,
+  Claude Desktop, Codex, Cursor dan agen lain, masih di peranti sendiri.
 - **Percuma**, untuk individu dan pasukan.
 
 ## Bahagian belakang AI
@@ -199,6 +253,138 @@ imej serasi OpenAI untuk penjanaan imej dan analisis imej/video.
 Keseluruhan rangkaian ini disertakan dengan tema terang, gelap dan sistem.
 Tema hanya mengubah apa yang dipaparkan pada skrin: eksport, cetakan dan fail
 yang disimpan sentiasa mengekalkan warna sebenar dokumen itu.
+
+<a id="command-line-and-agent-skill"></a>
+
+## Baris arahan dan skill agen
+
+Segala yang boleh dilakukan aplikasi pada sesuatu fail boleh dilakukan oleh
+baris arahan `genoffice` dari terminal: memeriksa, menukar, mencipta, membaca
+dan menyunting Word, Excel, PowerPoint, PDF, Markdown dan HTML pada enjin yang
+sama, tanpa antara muka (headless). Ia dipasang bersama GenOffice, tidak
+memerlukan runtime sendiri, dan tidak pernah menghantar dokumen ke mana-mana.
+Digandingkan dengan **skill agen** yang disertakan, ia menjadikan agen
+pengekodan sebagai pekerja dokumen yang menghasilkan fail Office sebenar dan
+bukan anggaran dalam Markdown.
+
+**Berfungsi dengan:** Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot,
+OpenCode dan Windsurf terus tanpa tetapan tambahan, mana-mana agen lain yang
+membaca skill, dan, melalui [pelayan MCP](#mcp-server), Claude Desktop serta
+setiap klien MCP.
+
+### Memasang skill
+
+| Cara                                              | Apa yang berlaku                                                                                                                                                                                      |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Tetapan → Integrasi** dalam aplikasi            | Menyenaraikan agen yang ditemui pada komputer ini; satu klik menulis skill ke dalam setiap satu yang anda pilih. Butang **Update** muncul apabila keluaran GenOffice membawa skill yang lebih baharu. |
+| **Muat turun sebagai zip** pada halaman yang sama | Susun atur yang diterima oleh claude.ai, aplikasi desktop Claude dan pembantu lain sebagai skill yang dimuat naik.                                                                                    |
+| `npx skills add genspark-ai/genoffice`            | Memasang daripada repositori ini ke dalam mana-mana agen yang serasi dengan skill.                                                                                                                    |
+
+Kemudian mulakan sembang baharu dan minta sesuatu dokumen. Skill itu mengajar
+agen bila perlu menggunakan `genoffice`, cara membaca fail sebelum
+menyuntingnya, dan cara menyemak hasil kerjanya sendiri.
+
+### Mula pantas dari terminal
+
+```bash
+genoffice --version
+genoffice info report.docx --json                  # headings and blocks; or sheets, slides, pages
+genoffice convert report.md --to pdf               # md/html/docx/xlsx/pptx → pdf, pdf → docx/xlsx/pptx, …
+genoffice create --type docx --from notes.md --out notes.docx
+genoffice create --type xlsx --from table.json --out sales.xlsx   # "=SUM(B2:B9)" cells stay live formulas
+genoffice docs read report.docx --range 0-9 --json # then `docs apply --ops edits.json` edits in place
+genoffice render report.docx --out shots/          # one PNG per page, to look at what you made
+genoffice open sales.xlsx                          # hand the result to the editor
+```
+
+Setiap arahan mencetak ringkasan satu baris, atau satu objek JSON dengan
+`--json`. Suntingan bersifat atomik: op yang ditolak membiarkan fail tidak
+tersentuh dan memulangkan ralat berpandu. `genoffice help` menyenaraikan set
+arahan semasa; rujukan penuh ada dalam
+[packages/cli/README.md](../../packages/cli/README.md).
+
+### Apa yang sebenarnya dijalankan oleh agen
+
+Deck Sistem Suria dalam demo di atas hanya memerlukan satu gesaan dalam Claude
+Code. Di sebaliknya, agen mengikuti aliran kerja berperingkat skill itu dan
+CLI menyemak setiap peringkat sebelum peringkat seterusnya bermula:
+
+```bash
+genoffice capabilities --json                        # which cloud tools GenOffice has configured
+genoffice guide slides design                        # the deck workflow and layout library
+genoffice image "the eight planets in a row …" --aspect 16:9 --out deck/assets/cover.jpg
+genoffice slides check deck/outline.json --json      # 8 pages, no findings
+genoffice slides check deck/pages/01.json --json     # builds one slide, audits overflow and overlap
+…                                                    # one page file per slide, fixed until each check is clean
+genoffice create --type pptx --spec deck/pages --outline deck/outline.json --out deck/solar-system.pptx --json
+genoffice slides render deck/solar-system.pptx --out deck/shots --json
+genoffice slides audit deck/solar-system.pptx --json    # 8 slides, no layout issues
+genoffice slides replace deck/solar-system.pptx --slide 4 --spec deck/pages/05.json --json
+genoffice open deck/solar-system.pptx
+```
+
+Tiada panggilan model berlaku di dalam `genoffice`: agen yang berfikir, CLI
+yang membina dan menyemak, dan hasilnya dibuka dalam GenOffice atau PowerPoint
+sebagai `.pptx` biasa.
+
+<a id="mcp-server"></a>
+
+### Pelayan MCP
+
+Arahan yang sama tersedia sebagai alat [Model Context Protocol](https://modelcontextprotocol.io)
+untuk pembantu yang tidak boleh menjalankan terminal, atau yang anda lebih
+suka tidak diberi satu. Terdapat dua cara untuk masuk, kedua-duanya
+ditunjukkan dengan cebisan sedia salin dalam **Tetapan → Integrasi → MCP**:
+
+| Cara                                | Apa dia                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **A · `genoffice mcp`** (disyorkan) | Pelayan stdio yang pembantu mulakan sendiri; GenOffice tidak perlu dibuka. Satu alat bagi setiap arahan (`info`, `convert`, `create_docx`, `create_xlsx`, `create_pptx`, `create_pdf`, `docs_read` / `docs_apply` / `docs_check`, `sheet_*`, `slides_*`, `render`, `guide`, `search`, `image`, `media`, `open`) ditambah aliran deck berperingkat `deck_start` → `deck_page` → `deck_build` → `deck_replace`. Ops, spesifikasi dan Markdown dihantar terus dalam argumen, jadi klien tanpa sistem fail tetap berfungsi. |
+| **B · Pelayan HTTP tempatan**       | Berjalan di dalam aplikasi GenOffice pada `http://127.0.0.1:3093/mcp` (Streamable HTTP, dengan SSE lama). Alatnya memandu tab editor Word yang kelihatan: `create_session`, `insert_content`, `replace_blocks`, `apply_ops`, `read_document`, `save_session`, dan anda melihat dokumen itu terbentuk. Dimatikan secara lalai; hidupkan pada panel tetapan yang sama.                                                                                                                                                    |
+
+```bash
+# Claude Code
+claude mcp add --transport stdio genoffice -- genoffice mcp
+```
+
+```jsonc
+// Cursor, Claude Desktop atau mana-mana klien MCP lain
+{ "mcpServers": { "genoffice": { "command": "genoffice", "args": ["mcp"] } } }
+```
+
+`genoffice` di sini ialah CLI yang disertakan di dalam aplikasi (pada macOS
+`/Applications/GenOffice.app/Contents/Resources/cli/genoffice`; panel
+tetapan memaparkan laluan tepat untuk pemasangan anda). Pelayan ini membawa
+arahan aliran kerjanya sendiri dan mendedahkan rujukan operasi sebagai
+sumber `genoffice://guide/*`, jadi tiada skill diperlukan; skill dan
+pelayan MCP boleh wujud bersama dan pembantu memilih salah satu. Ciri awan
+(`search`, `image`, `media`) masih melalui pembekal yang ditetapkan dalam
+GenOffice; selebihnya berjalan secara tempatan, dan
+`GENOFFICE_ALLOWED_ROOTS` mengehadkan setiap alat kepada folder yang anda
+senaraikan.
+
+Deck tenaga boleh diperbaharui dalam demo di atas ialah gambaran, dari sudut
+protokol, satu gesaan dalam Claude Code yang hanya menyambungkan pelayan
+MCP `genoffice`:
+
+```text
+capabilities · guide(slides, spec) · guide(slides, design)
+search(query) ×4                         → IEA, BNEF and IRENA figures for the slides
+search(query, images) ×7 · media(url, ask) ×7
+                                         → candidate photos, each one checked to be a real photograph
+deck_start(dir, style, outline)          → outline checked: 8 pages to write
+deck_page(dir, 0, page) … deck_page(dir, 7, page)
+                                         → each page checked against the outline and the palette; one page sent again
+deck_build(dir, out)                     → renewables-2026.pptx, no image failures
+slides_audit(file) · slides_render(file, out)
+                                         → no layout findings; 8 PNGs come back as image content
+deck_replace(dir, n, page) ×3 · slides_render(file, out)
+                                         → three pages fixed after looking at the renders
+```
+
+Tiga puluh lapan panggilan, kira-kira tiga belas minit, dan pembantu itu
+langsung tidak menyentuh shell: rajah, foto, semua panduan, semakan dan
+render bergerak sebagai hasil panggilan alat MCP. Hanya `search` dan `media`
+meninggalkan mesin, kepada pembekal yang dikonfigurasikan dalam GenOffice.
 
 <a id="download"></a>
 
@@ -368,6 +554,19 @@ Chromium terbina dalam dan dikurangkan kepada struktur Word sebenar: tajuk,
 perenggan, senarai, jadual, kad, baris KPI, medan borang dan latar belakang
 halaman; hanya visual yang tidak mempunyai persamaan dalam Word (carta, ikon,
 kotak berhias) dibenamkan sebagai gambar.
+
+</details>
+
+<details>
+<summary><b>Bolehkah saya memandu GenOffice daripada Claude Code, Codex, Cursor atau skrip?</b></summary>
+
+Ya. GenOffice memasang baris arahan `genoffice` yang menjalankan enjin yang
+sama tanpa antara muka: memeriksa, menukar, mencipta, membaca dan menyunting
+dokumen dari terminal atau skrip, dengan output `--json` untuk program. Skill
+agen yang disertakan mengajar Claude Code, Codex, Cursor, Gemini CLI, GitHub
+Copilot, OpenCode dan Windsurf menggunakannya; pasang daripada
+**Tetapan → Integrasi**. Lihat
+[Baris arahan dan skill agen](#command-line-and-agent-skill).
 
 </details>
 

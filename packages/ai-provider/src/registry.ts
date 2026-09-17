@@ -47,16 +47,18 @@ function metaOf(id: AiProviderId): AiProviderMeta {
  * must not be sent there either.
  */
 export function modelHasFixedSampling(model: string): boolean {
-  return /(^|\/)(kimi-k3|gpt-5|gemini-3|o1(-mini|-preview)?|o3(-mini)?|o4-mini)/.test(model)
+  return /(^|\/)(kimi-k3([^\w]|$)|gpt-5([^\w]|$)|gemini-3([^\w]|$)|o1(-mini|-preview)?([^\w]|$)|o3(-mini)?([^\w]|$)|o4-mini([^\w]|$))/i.test(
+    model,
+  )
 }
 
 /**
  * Model ids that reject image input even under a vision-capable provider.
- * DeepSeek V4 Pro and Flash are text-only; their -vision* branches are
- * excluded so the direct Vision Exp model can receive screenshots.
+ * DeepSeek V4 Pro and V4 Flash are text-only; V4.1 Flash and the -vision*
+ * branches take images, so they fall through and receive screenshots.
  */
 export function modelLacksVision(model: string): boolean {
-  return /(^|\/)deep-?seek-v4-(?:pro(?:$|-)|flash(?!-vision))/.test(model)
+  return /(^|\/)deep-?seek-v4-(?:pro(?:$|-)|flash(?!-vision))/i.test(model)
 }
 
 /**
@@ -100,10 +102,12 @@ function opencodeEndpoint(
   return (config) => {
     // a stored base URL replaces the gateway root; the documented `/v1` API base is tolerated
     const base = (config.baseUrl || root).replace(/\/+$/, '').replace(/\/v1$/, '')
-    if (routes.anthropic.test(config.model)) return { protocol: 'anthropic', baseUrl: base }
-    const omit = modelHasFixedSampling(config.model) || config.model.startsWith('kimi-')
-    const sampling = omit ? { omitTemperature: true } : {}
-    if (routes.gemini?.test(config.model)) {
+    const model = config.model ?? ''
+    const omit =
+      model !== '' && (modelHasFixedSampling(model) || model.toLowerCase().startsWith('kimi-'))
+    const sampling = omit ? { omitTemperature: true as const } : {}
+    if (routes.anthropic.test(model)) return { protocol: 'anthropic', baseUrl: base, ...sampling }
+    if (routes.gemini?.test(model)) {
       return { protocol: 'gemini', baseUrl: `${base}/v1`, ...sampling }
     }
     return { protocol: 'openai-compatible', baseUrl: `${base}/v1`, ...sampling }

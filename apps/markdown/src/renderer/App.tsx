@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useAutoSavePref } from '@genoffice/ui'
+import { ImageViewer, useAutoSavePref, FilesPane, FilesEdgeTab } from '@genoffice/ui'
+import {
+  pollUntilReady,
+  runHeadlessRendererExport,
+} from '@genoffice/electron-utils/headless-export'
 import { EditorContent, useEditor } from '@tiptap/react'
 import { FindPanel, type FindFocusRequest, type FindPanelStrings } from '@genoffice/ui'
 import type { Editor } from '@tiptap/core'
@@ -18,7 +22,7 @@ import { tiptapFindTarget } from './editor/findTarget'
 import { collectOutline, type OutlineItem } from './editor/outline'
 import { buildSlashItems } from './editor/slashCommand'
 import type { SlashController, SlashMenuState } from './editor/slashCommand'
-import { setImageBaseDir } from './editor/localImage'
+import { dirOf, setImageBaseDir, VIEW_IMAGE_EVENT } from './editor/localImage'
 import { Ribbon } from './components/Ribbon'
 import { OutlinePane } from './components/OutlinePane'
 import { SlashMenu, type SlashMenuHandle } from './components/SlashMenu'
@@ -49,11 +53,6 @@ const EMPTY_ENVELOPE: DocEnvelope = {
   eol: '\n',
   trailingNewline: true,
   bom: false,
-}
-
-function dirOf(path: string): string {
-  const i = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
-  return i > 0 ? path.slice(0, i) : path
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -119,7 +118,7 @@ export function deriveAutoFileName(editor: Editor): string {
 }
 
 export default function App() {
-  const { t } = useI18n()
+  const { t, lang } = useI18n()
   const [status, setStatus] = useState<LoadStatus>('loading')
   const [filePath, setFilePath] = useState<string | null>(null)
   const [dirty, setDirty] = useState(false)
@@ -138,6 +137,23 @@ export default function App() {
   const [showFind, setShowFind] = useState(false)
   const [findFocus, setFindFocus] = useState<FindFocusRequest>({ field: 'find', nonce: 0 })
   const [outlineOpen, setOutlineOpen] = useState(false)
+  const [filesOpen, setFilesOpen] = useState(() => localStorage.getItem('mdapp.showFiles') === '1')
+  const [outlineWidth, setOutlineWidth] = useState(
+    () => Number(localStorage.getItem('mdapp.outlineWidth')) || undefined,
+  )
+  const [spellcheck, setSpellcheck] = useState(
+    () => localStorage.getItem('mdapp.spellcheck') !== '0',
+  )
+  const [viewImage, setViewImage] = useState<string | null>(null)
+  useEffect(() => {
+    const onEvent = (e: Event) => setViewImage((e as CustomEvent<{ src: string }>).detail.src)
+    window.addEventListener(VIEW_IMAGE_EVENT, onEvent)
+    const off = window.markdownApi.onViewImage((src) => setViewImage(src))
+    return () => {
+      window.removeEventListener(VIEW_IMAGE_EVENT, onEvent)
+      off()
+    }
+  }, [])
   const [outlineItems, setOutlineItems] = useState<OutlineItem[]>([])
   const [zoom, setZoom] = useState(100)
 
@@ -193,7 +209,7 @@ export default function App() {
     extensions,
     content: '',
     autofocus: true,
-    editorProps: { attributes: { class: 'doc-editor' } },
+    editorProps: { attributes: { class: 'doc-editor', spellcheck: String(spellcheck) } },
     // uiOnly transactions (toggle fold state) never reach the file — not dirty
     onUpdate: ({ editor: updated, transaction }) => {
       if (!transaction.getMeta('uiOnly')) markDirty()
@@ -202,6 +218,17 @@ export default function App() {
   })
   editorRef.current = editor
   filePathRef.current = filePath
+
+  useEffect(() => {
+    localStorage.setItem('mdapp.spellcheck', spellcheck ? '1' : '0')
+    editor?.setOptions({
+      editorProps: { attributes: { class: 'doc-editor', spellcheck: String(spellcheck) } },
+    })
+  }, [editor, spellcheck])
+
+  useEffect(() => {
+    if (outlineWidth) localStorage.setItem('mdapp.outlineWidth', String(outlineWidth))
+  }, [outlineWidth])
   const findTarget = useMemo(() => (editor ? tiptapFindTarget(editor) : null), [editor])
 
   useEffect(() => {
@@ -307,9 +334,10 @@ export default function App() {
     }
   }, [])
 
-  const runExport = useCallback(async (format: ExportFormat) => {
+  /** `outPath` (headless export only) skips the save dialog; resolves true when a file was written. */
+  const runExport = useCallback(async (format: ExportFormat, outPath?: string) => {
     const current = editorRef.current
-    if (!current || statusRef.current !== 'ready') return
+    if (!current || statusRef.current !== 'ready') return false
     const suggestedName =
       (filePathRef.current
         ? filePathRef.current.replace(/^.*[/\\]/, '').replace(/\.(md|markdown)$/i, '')
@@ -317,9 +345,13 @@ export default function App() {
     try {
       if (format === 'pdf') {
         const html = buildPrintHtml(current.view.dom, suggestedName)
-        const result = await window.markdownApi.exportPdf({ html, suggestedName })
+        const result = await window.markdownApi.exportPdf({
+          html,
+          suggestedName,
+          ...(outPath ? { outPath } : {}),
+        })
         if (!result.ok) console.error('[markdown] pdf export failed:', result.error)
-        return
+        return result.ok && !('canceled' in result)
       }
       const loadImage = async (src: string) => {
         const data = await window.markdownApi.readImage(src)
@@ -344,10 +376,35 @@ export default function App() {
         mode: format === 'docs' ? 'openInDocs' : 'dialog',
       })
       if (!result.ok) console.error('[markdown] docx export failed:', result.error)
+      return result.ok && !('canceled' in result)
     } catch (err) {
       console.error('[markdown] export failed:', err)
+      return false
     }
   }, [])
+
+  // Headless export mode (--headless-export): this renderer lives in a hidden
+  // window whose only job is to run the File menu's PDF export against a path
+  // the CLI chose, then report back so the main process can quit.
+  const headlessExportStartedRef = useRef(false)
+  useEffect(() => {
+    if (headlessExportStartedRef.current) return
+    headlessExportStartedRef.current = true
+    void (async () => {
+      const outPath = await window.markdownApi.consumeHeadlessExport()
+      if (!outPath) return
+      const report = await runHeadlessRendererExport(
+        outPath,
+        () =>
+          pollUntilReady(() => {
+            if (statusRef.current === 'error') throw new Error('the input document did not open')
+            return statusRef.current === 'ready'
+          }, 'no document opened'),
+        (target) => runExport('pdf', target),
+      )
+      window.markdownApi.headlessExportDone(report)
+    })()
+  }, [runExport])
 
   /**
    * Print through the same self-contained HTML the PDF export uses, loaded into a
@@ -488,6 +545,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('mdapp.showAi', aiOpen ? '1' : '0')
   }, [aiOpen])
+
+  useEffect(() => {
+    localStorage.setItem('mdapp.showFiles', filesOpen ? '1' : '0')
+  }, [filesOpen])
 
   // autosave: every 30s and on window blur, silently persist pending changes
   // (same policy as the docs app; untitled documents are skipped — the first
@@ -648,7 +709,11 @@ export default function App() {
         onToggleFrontmatter={() => setFmOpen((v) => !v)}
         outlineOpen={outlineOpen}
         onToggleOutline={() => setOutlineOpen((v) => !v)}
+        filesOpen={filesOpen}
+        onToggleFiles={() => setFilesOpen((v) => !v)}
         hasOutline={outlineItems.length > 0}
+        spellcheck={spellcheck}
+        onToggleSpellcheck={() => setSpellcheck((v) => !v)}
         aiOpen={aiOpen}
         onToggleAi={() => setAiOpen((v) => !v)}
         onAiPreset={(text) => {
@@ -685,8 +750,24 @@ export default function App() {
             />
           )}
         </div>
-        {outlineOpen && <OutlinePane items={outlineItems} onJump={jumpToOutline} />}
+        {filesOpen && (
+          <FilesPane
+            api={window.filesPaneApi}
+            lang={lang}
+            currentPath={filePath}
+            onClose={() => setFilesOpen(false)}
+          />
+        )}
+        {outlineOpen && (
+          <OutlinePane
+            items={outlineItems}
+            onJump={jumpToOutline}
+            width={outlineWidth}
+            onResize={setOutlineWidth}
+          />
+        )}
         <div className="app-content">
+          {!filesOpen && <FilesEdgeTab lang={lang} onOpen={() => setFilesOpen(true)} />}
           {showFind && findTarget && (
             <FindPanel
               target={findTarget}
@@ -744,6 +825,21 @@ export default function App() {
       </div>
       <SlashMenu ref={slashMenuRef} state={slashState} onDismiss={() => setSlashState(null)} />
       <ToastHost />
+      {viewImage && (
+        <ImageViewer
+          src={viewImage}
+          labels={{
+            zoomIn: t('zoomIn'),
+            zoomOut: t('zoomOut'),
+            actualSize: t('imageActualSize'),
+            fitToWindow: t('imageFitWindow'),
+            save: t('saveImageAs'),
+            close: t('closeEsc'),
+          }}
+          onClose={() => setViewImage(null)}
+          onSave={() => void window.markdownApi.saveImageAs(viewImage)}
+        />
+      )}
       <TableMenu editor={editor} scrollRef={scrollRef} zoom={zoom} />
       {editor && status === 'ready' && (
         <AiAskPopover

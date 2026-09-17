@@ -21,6 +21,7 @@ import {
   THEME_COLORS,
   THEME_COLOR_SHADES,
   STANDARD_COLORS,
+  filesPaneTitle,
 } from '@genoffice/ui'
 import { getRecentColors, pushRecentColor } from '../recent-colors'
 import { ICON_COLORS } from '../insert-presets'
@@ -1099,6 +1100,8 @@ export function Ribbon({
   onZoom,
   showThumbs,
   onToggleThumbs,
+  filesOpen,
+  onToggleFiles,
   aiOpen,
   onToggleAi,
   onAiPreset,
@@ -1234,7 +1237,7 @@ export function Ribbon({
   onFlip,
   canDistribute,
 }: Props) {
-  const { t } = useI18n()
+  const { t, lang } = useI18n()
   const contextTab = contextTabForElement(contextElementType ?? null)
   const autoContextTab = autoContextTabForElement(contextElementType ?? null)
 
@@ -1286,7 +1289,7 @@ export function Ribbon({
   const [fontDraft, setFontDraft] = useState<string | null>(null)
   const [tableOpen, setTableOpen] = useState(false)
   const [tableHover, setTableHover] = useState({ r: 0, c: 0 })
-  const [tableCustom, setTableCustom] = useState({ r: 8, c: 5 })
+  const [tableDialogOpen, setTableDialogOpen] = useState(false)
   const [layoutOpen, setLayoutOpen] = useState(false)
   // responsive-collapse state (see the collapse effect below)
   const [collapsedGroups, setCollapsedGroups] = useState<string[]>([])
@@ -1684,7 +1687,7 @@ export function Ribbon({
     setSizeOpen,
     setSlideShowFromStart,
     setSlideShowOpen,
-    setTableCustom,
+    setTableDialogOpen,
     setTableHover,
     setTableOpen,
     sizeDraft,
@@ -1692,7 +1695,7 @@ export function Ribbon({
     slideShowFromStart,
     slideShowOpen,
     t,
-    tableCustom,
+    tableDialogOpen,
     tableHover,
     tableOpen,
   }
@@ -2633,6 +2636,12 @@ export function Ribbon({
                   on={showThumbs}
                   title={t('ribbonThumbnailPaneTip')}
                   onClick={onToggleThumbs}
+                />
+                <RbCheck
+                  label={filesPaneTitle(lang)}
+                  on={filesOpen}
+                  title={filesPaneTitle(lang)}
+                  onClick={onToggleFiles}
                 />
               </div>
             </Group>

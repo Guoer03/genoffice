@@ -9,8 +9,8 @@ import { launchShell, closeAndSaveVideo, waitForPageWithUrl } from './helpers'
 process.env.GENOFFICE_DEBUG_HOOKS = '1'
 
 /**
- * Regression for "copied C2:E2, selected C2:C14, paste didn't repeat" (alpha
- * feedback): pasting a copied row into a single-column multi-row
+ * Regression for "copied C2:E2, selected C2:C14, paste didn't repeat" (user
+ * report): pasting a copied row into a single-column multi-row
  * target must repeat the row for each selected row, spilling the source's
  * width — Excel/Google Sheets bulk-fill.
  */
@@ -52,7 +52,7 @@ test.describe('sheets: paste repeats into an anchor-shaped target', () => {
       await expect(page.locator('.quick-card').nth(1)).toContainText('AI Sheets')
       await page.locator('.quick-card').nth(1).click()
 
-      const sheets = await waitForPageWithUrl(app, 'sheets/out')
+      const sheets = await waitForPageWithUrl(app, '://sheets/')
       await sheets.waitForFunction(() => document.body.textContent?.includes('Sheet1'), null, {
         timeout: 30_000,
       })

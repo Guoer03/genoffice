@@ -8,7 +8,7 @@ const KEY = 'slides:recent-colors'
 const MAX = 10
 
 const normalize = (hex: string): string | null => {
-  const m = /^#?([0-9a-f]{6})/i.exec(hex.trim())
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim())
   return m ? `#${m[1]!.toUpperCase()}` : null
 }
 

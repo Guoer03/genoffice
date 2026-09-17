@@ -36,10 +36,10 @@ function sharedStringText(si: Record<string, unknown>): string {
     .join('')
 }
 
-/** "BC12" → zero-based column index 54 */
+/** "BC12" → zero-based column index 54 (cell refs are case-insensitive per ECMA-376) */
 function columnIndex(cellRef: string): number {
   let index = 0
-  for (const ch of cellRef) {
+  for (const ch of cellRef.toUpperCase()) {
     if (ch < 'A' || ch > 'Z') break
     index = index * 26 + (ch.charCodeAt(0) - 64)
   }

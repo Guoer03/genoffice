@@ -23,6 +23,8 @@
 
 <p align="center" dir="rtl">
   <a href="#download"><b>التنزيل</b></a> ·
+  <a href="#command-line-and-agent-skill"><b>CLI</b></a> ·
+  <a href="#mcp-server"><b>MCP</b></a> ·
   <a href="https://genoffice.ai/"><b>الموقع الإلكتروني</b></a> ·
   <a href="https://genoffice.ai/join"><b>المجتمع</b></a> ·
   <a href="../../PRIVACY.md"><b>الخصوصية</b></a>
@@ -49,6 +51,10 @@ GenOffice بديل مجاني ومفتوح المصدر لـ Microsoft Office ع
   أو استخدم مفتاحك الخاص مع Claude أو OpenAI أو Gemini أو DeepSeek أو Kimi أو
   GLM أو Qwen أو Doubao أو MiniMax أو Grok أو Mistral أو OpenRouter أو Requesty، أو أي
   نقطة نهاية متوافقة مع OpenAI، بما في ذلك الخوادم المحلية.
+- **قابل للبرمجة وجاهز للوكلاء.** يأتي التطبيق مع سطر أوامر `genoffice` ومهارة
+  لكل من Claude Code وCodex وCursor وGemini CLI وGitHub Copilot وOpenCode
+  وWindsurf، ليتمكّن وكيل البرمجة من إنشاء ملفات Office حقيقية وتحويلها
+  وقراءتها وتحريرها على جهازك دون فتح أي نافذة.
 
 **الحصول عليه:** [macOS](https://github.com/genspark-ai/genoffice/releases/latest) (Apple Silicon و Intel) ·
 [Windows](https://github.com/genspark-ai/genoffice/releases/latest) (x64 و Arm) ·
@@ -57,9 +63,9 @@ GenOffice بديل مجاني ومفتوح المصدر لـ Microsoft Office ع
 
 ## العرض التوضيحي
 
-ست تطبيقات، ولوحة ذكاء اصطناعي واحدة. كل لقطة شاشة هي من التطبيق الفعلي على
-macOS، والذكاء الاصطناعي فيها ناتج عن التوجيه (prompt) الذي يمكنك قراءته في
-اللوحة.
+ست تطبيقات، ولوحة ذكاء اصطناعي واحدة، وسطر أوامر لوكيل البرمجة الخاص بك. كل
+لقطة شاشة هي من التطبيق الفعلي على macOS، والذكاء الاصطناعي فيها ناتج عن
+التوجيه (prompt) الذي يمكنك قراءته في اللوحة.
 
 ### 1 · Docs — افتح وحرّر ملفات `.docx` بمساعدة ذكاء اصطناعي يمكنك مراجعته
 
@@ -158,6 +164,47 @@ macOS، والذكاء الاصطناعي فيها ناتج عن التوجيه 
 </tr>
 </table>
 
+### 7 · CLI — وكيل البرمجة الخاص بك يقود GenOffice، على جهازك
+
+يأتي GenOffice مع سطر أوامر `genoffice` ومهارة وكيل. ثبّت المهارة، وسيتمكّن
+Claude Code أو Codex أو Cursor أو Gemini CLI أو GitHub Copilot أو OpenCode أو
+Windsurf من إنشاء ملفات Office حقيقية وتحويلها وقراءتها وتحريرها عبر المحرّكات
+نفسها التي تستخدمها التطبيقات، دون فتح أي نافذة.
+
+<img src="../assets/readme/cli-deck-in-app.webp" alt="GenOffice Slides يعرض عرضًا تقديميًا من ثماني شرائح عن المجموعة الشمسية بناه وكيل برمجة عبر سطر أوامر genoffice: شريحة الغلاف على لوحة الرسم، وثماني مصغّرات على اليسار، ولوحة الذكاء الاصطناعي مفتوحة" width="100%">
+
+<table>
+<tr>
+<td width="50%"><img src="../assets/readme/cli-slides-grid.webp" alt="الشرائح الثماني المُصيَّرة لعرض المجموعة الشمسية جنبًا إلى جنب: الغلاف، والجدول الزمني للاستكشاف، وأربعة أرقام رئيسية، ورسم بياني بالأعمدة لأقطار الكواكب، والعوالم الصخرية مقابل العمالقة، ورقم الشمس البارز 99.8%، وشبكة العمالقة الأربعة، والخلاصات"></td>
+<td width="50%"><img src="../assets/readme/cli-integrations.webp" alt="إعدادات GenOffice، صفحة Integrations: مهارة genoffice مثبَّتة في Claude Code، مع أزرار Install بجوار Codex وCursor"></td>
+</tr>
+<tr>
+<td dir="rtl"><b>توجيه واحد إلى وكيلك</b> — "أنشئ عرضًا تقديميًا من ثماني شرائح عن المجموعة الشمسية." يقرأ الوكيل المهارة، ويكتب ورقة أنماط ومخططًا ومواصفة صفحة واحدة لكل شريحة، ويولّد الصورتين بواسطة <code>genoffice image</code>، ويترك <code>genoffice slides check</code> يرفض أي عنصر يتجاوز الحدود أو يتداخل قبل أن يجمّع <code>genoffice create</code> ملف <code>.pptx</code> ويُعيد <code>slides render</code> صورة PNG لكل شريحة لمعاينتها.</td>
+<td dir="rtl"><b>ثبّت مرة واحدة، من الإعدادات → التكاملات</b> — يسرد GenOffice وكلاء البرمجة الذين يجدهم على هذا الجهاز ويكتب المهارة في كل وكيل تختاره. أو نزّل المهارة كملف zip، أو شغّل <code>npx skills add genspark-ai/genoffice</code>. الأوامر وسير العمل الكامل في <a href="#command-line-and-agent-skill">سطر الأوامر ومهارة الوكيل</a>.</td>
+</tr>
+</table>
+
+### 8 · MCP — نفس الأدوات عبر Model Context Protocol
+
+كل أمر من أوامر `genoffice` هو أيضًا أداة MCP. يمكن لـ Claude Code وClaude
+Desktop وCursor وأي عميل MCP آخر تشغيل `genoffice mcp` بأنفسهم، دون الحاجة
+إلى تثبيت مهارة أو فتح نافذة، والحصول على 29 أداة بالإضافة إلى مراجع
+العمليات كموارد (resources). كما يتيح خادم HTTP ثانٍ داخل التطبيق للوكيل
+بناء مستند Word في تبويب محرِّر مرئي بينما تشاهد.
+
+<img src="../assets/readme/mcp-deck-motion.webp" alt="لقطات متسارعة لـ Claude Code وهو يبني عرضًا استثماريًا من ثماني شرائح عن الطاقة المتجدّدة عبر خادم MCP الخاص بـ genoffice: يبحث عن الرسوم البيانية والصور، ويتحقق من كل صورة مرشّحة عبر media، وdeck_start يكتب ورقة الأنماط والمخطط، وdeck_page يضيف صفحة واحدة مُتحقَّقة في كل مرة، وdeck_build يجمّع ملف .pptx، وslides_render يعيد صورة كل شريحة؛ ثم يُفتح العرض النهائي في GenOffice Slides" width="100%">
+
+<table>
+<tr>
+<td width="50%"><img src="../assets/readme/mcp-deck-in-app.webp" alt="GenOffice Slides يعرض عرض Renewable Energy 2026 من ثماني شرائح الذي بناه Claude Code عبر خادم MCP الخاص بـ genoffice: شريحة الغلاف مع صورة فوتوغرافية لمزرعة رياح على لوحة الرسم وثماني مصغّرات على اليسار"></td>
+<td width="50%"><img src="../assets/readme/mcp-integrations.webp" alt="إعدادات GenOffice، صفحة Integrations، جزء MCP: أمر claude mcp add من سطر واحد لـ Claude Code، وكتلة JSON لـ Cursor وClaude Desktop وعملاء MCP الآخرين، وخيار خادم HTTP المحلي أسفل ذلك"></td>
+</tr>
+<tr>
+<td dir="rtl"><b>توجيه واحد، 38 استدعاءً للأدوات، بلا طرفية</b> — "ابنِ عرضًا استثماريًا من ثماني شرائح عن الطاقة المتجدّدة في 2026، بصورة حقيقية على الغلاف وحيثما تفيد صورة." يسحب الوكيل الرسوم البيانية والصور عبر <code>search</code>، ويسأل <code>media</code> عمّا إذا كانت كل صورة مرشّحة صورة فوتوغرافية حقيقية، ثم يستدعي <code>deck_start</code> بورقة أنماط ومخطط، ثم <code>deck_page</code> لكل شريحة؛ تُفحص كل صفحة مقابل المخطط والباليت قبل الاحتفاظ بها، ويجمّع <code>deck_build</code> ملف <code>.pptx</code>، ويبحث <code>slides_audit</code> عن التجاوزات، ويعيد <code>slides_render</code> صورة PNG لكل شريحة كمحتوى صوري يمكن للنموذج النظر إليه، ويُصلح <code>deck_replace</code> الصفحات الثلاث التي لم تعجبه.</td>
+<td dir="rtl"><b>اتصل مرة واحدة، من الإعدادات → التكاملات</b> — انسخ سطر <code>claude mcp add</code> لـ Claude Code، أو كتلة JSON إلى Cursor أو Claude Desktop أو أي عميل MCP آخر. يفعِّل الخيار B خادم HTTP المحلي لمحرِّر Word المرئي. كلاهما موضّح في <a href="#mcp-server">خادم MCP</a>.</td>
+</tr>
+</table>
+
 ## لماذا GenOffice
 
 - **مفتوح المصدر**، برخصة Apache-2.0، ويُطوَّر علنًا على GitHub.
@@ -174,6 +221,9 @@ macOS، والذكاء الاصطناعي فيها ناتج عن التوجيه 
 - **PDF يُعالَج كما ينبغي.** حرِّر النص داخل الصفحة مباشرة، وحوِّل PDF إلى Word
   أو Excel أو PowerPoint على جهازك، مع OCR للنظام لملفات المسح الممسوحة.
 - **Markdown و HTML أيضًا**، بنفس لوحة الذكاء الاصطناعي وتصدير محلي إلى Word.
+- **قابل للبرمجة.** سطر أوامر `genoffice`، ومهارة وكيل، وخادم MCP يضعون كل
+  محرّك في خدمة Claude Code وClaude Desktop وCodex وCursor وغيرها من الوكلاء،
+  مع بقاء كل شيء على الجهاز.
 - **مجاني**، للأفراد والفرق على حد سواء.
 
 ## خلفيات الذكاء الاصطناعي
@@ -194,6 +244,129 @@ Grok أو Qwen أو MiniMax أو أي نقطة نهاية للصور متواف�
 تأتي الحزمة كاملةً بثلاثة مظاهر: فاتح وداكن ومظهر النظام. تغيّر المظاهر فقط ما
 يظهر على الشاشة: تحتفظ ملفات التصدير والطباعة والحفظ دائمًا بألوان المستند
 نفسه.
+
+<a id="command-line-and-agent-skill"></a>
+
+## سطر الأوامر ومهارة الوكيل
+
+كل ما تستطيع التطبيقات فعله بملف، يستطيع سطر أوامر `genoffice` فعله من
+الطرفية: فحص ملفات Word وExcel وPowerPoint وPDF وMarkdown وHTML وتحويلها
+وإنشاؤها وقراءتها وتحريرها على المحرّكات نفسها، دون واجهة رسومية. يُثبَّت مع
+GenOffice، ولا يحتاج إلى بيئة تشغيل خاصة به، ولا يرسل أي مستند إلى أي مكان.
+وبالاقتران مع **مهارة الوكيل** المرفقة، يحوّل وكيل البرمجة إلى عامل مستندات
+يُنتج ملفات Office حقيقية بدلًا من تقريبات بصيغة Markdown.
+
+**يعمل مع:** Claude Code وCodex وCursor وGemini CLI وGitHub Copilot وOpenCode
+وWindsurf مباشرة دون أي إعداد، ومع أي وكيل آخر يقرأ المهارات، وكذلك، عبر
+[خادم MCP](#mcp-server)، مع Claude Desktop وأي عميل MCP.
+
+### تثبيت المهارة
+
+| الطريقة                                | ما يحدث                                                                                                                                            |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **الإعدادات → التكاملات** في التطبيق   | يسرد الوكلاء الموجودين على هذا الجهاز؛ وبنقرة واحدة يكتب المهارة في كل وكيل تختاره. ويظهر زر **Update** عندما يصدر إصدار من GenOffice بمهارة أحدث. |
+| **التنزيل كملف zip** من الصفحة نفسها   | التنسيق الذي يقبله claude.ai وتطبيقات Claude لسطح المكتب والمساعدون الآخرون كمهارة مرفوعة.                                                         |
+| `npx skills add genspark-ai/genoffice` | يثبّت من هذا المستودع في أي وكيل متوافق مع المهارات.                                                                                               |
+
+ثم ابدأ محادثة جديدة واطلب مستندًا. تعلّم المهارة الوكيل متى يلجأ إلى
+`genoffice`، وكيف يقرأ الملف قبل تحريره، وكيف يتحقّق من عمله بنفسه.
+
+### بداية سريعة من الطرفية
+
+```bash
+genoffice --version
+genoffice info report.docx --json                  # headings and blocks; or sheets, slides, pages
+genoffice convert report.md --to pdf               # md/html/docx/xlsx/pptx → pdf, pdf → docx/xlsx/pptx, …
+genoffice create --type docx --from notes.md --out notes.docx
+genoffice create --type xlsx --from table.json --out sales.xlsx   # "=SUM(B2:B9)" cells stay live formulas
+genoffice docs read report.docx --range 0-9 --json # then `docs apply --ops edits.json` edits in place
+genoffice render report.docx --out shots/          # one PNG per page, to look at what you made
+genoffice open sales.xlsx                          # hand the result to the editor
+```
+
+يطبع كل أمر ملخّصًا من سطر واحد، أو كائن JSON واحدًا مع `--json`. التعديلات
+ذرّية: العملية المرفوضة تترك الملف كما هو وتعود برسالة خطأ إرشادية. يسرد
+`genoffice help` مجموعة الأوامر الحالية؛ والمرجع الكامل في
+[packages/cli/README.md](../../packages/cli/README.md).
+
+### ما الذي يشغّله الوكيل فعليًا
+
+عرض المجموعة الشمسية في العرض التوضيحي أعلاه استغرق توجيهًا واحدًا في Claude Code.
+وخلف الكواليس، اتّبع الوكيل سير العمل المرحلي للمهارة، وتحقّق سطر الأوامر من
+كل مرحلة قبل أن تبدأ التالية:
+
+```bash
+genoffice capabilities --json                        # which cloud tools GenOffice has configured
+genoffice guide slides design                        # the deck workflow and layout library
+genoffice image "the eight planets in a row …" --aspect 16:9 --out deck/assets/cover.jpg
+genoffice slides check deck/outline.json --json      # 8 pages, no findings
+genoffice slides check deck/pages/01.json --json     # builds one slide, audits overflow and overlap
+…                                                    # one page file per slide, fixed until each check is clean
+genoffice create --type pptx --spec deck/pages --outline deck/outline.json --out deck/solar-system.pptx --json
+genoffice slides render deck/solar-system.pptx --out deck/shots --json
+genoffice slides audit deck/solar-system.pptx --json    # 8 slides, no layout issues
+genoffice slides replace deck/solar-system.pptx --slide 4 --spec deck/pages/05.json --json
+genoffice open deck/solar-system.pptx
+```
+
+لا يحدث أي استدعاء لنموذج داخل `genoffice`: الوكيل هو من يفكّر، وسطر الأوامر
+هو من يبني ويتحقّق، وتُفتح النتيجة في GenOffice أو PowerPoint كملف `.pptx` عادي.
+
+<a id="mcp-server"></a>
+
+### خادم MCP
+
+الأوامر نفسها متاحة كأدوات [Model Context Protocol](https://modelcontextprotocol.io)
+للمساعدين الذين لا يمكنهم تشغيل طرفية، أو الذين تفضّل ألا تمنحهم واحدة. هناك
+طريقتان للدخول، وكلتاهما موضَّحتان بمقتطفات جاهزة للنسخ في **الإعدادات →
+التكاملات → MCP**:
+
+| الطريقة                            | ما هي                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **A · `genoffice mcp`** (موصى بها) | خادم stdio يشغّله المساعد بنفسه؛ لا حاجة لفتح GenOffice. أداة واحدة لكل أمر (`info`، `convert`، `create_docx`، `create_xlsx`، `create_pptx`، `create_pdf`، `docs_read` / `docs_apply` / `docs_check`، `sheet_*`، `slides_*`، `render`، `guide`، `search`، `image`، `media`، `open`) بالإضافة إلى تدفّق العرض المرحلي `deck_start` → `deck_page` → `deck_build` → `deck_replace`. تُمرَّر العمليات والمواصفات وMarkdown مباشرة ضمن الطلب، لذا يعمل حتى العميل بلا نظام ملفات. |
+| **B · خادم HTTP محلي**             | يعمل داخل تطبيق GenOffice على `http://127.0.0.1:3093/mcp` (Streamable HTTP، مع دعم SSE القديم). تُشغِّل أدواته تبويب محرِّر Word المرئي: `create_session`، `insert_content`، `replace_blocks`، `apply_ops`، `read_document`، `save_session`، وتشاهد المستند وهو يتشكّل. مُعطَّل افتراضيًا؛ فعِّله من لوحة الإعدادات نفسها.                                                                                                                                                   |
+
+```bash
+# Claude Code
+claude mcp add --transport stdio genoffice -- genoffice mcp
+```
+
+```jsonc
+// Cursor أو Claude Desktop أو أي عميل MCP آخر
+{ "mcpServers": { "genoffice": { "command": "genoffice", "args": ["mcp"] } } }
+```
+
+`genoffice` هنا هو سطر الأوامر المرفق داخل التطبيق (على macOS في
+`/Applications/GenOffice.app/Contents/Resources/cli/genoffice`؛ تعرض لوحة
+الإعدادات المسار الدقيق لتثبيتك). يحمل الخادم تعليمات سير عمله الخاصة
+ويعرض مراجع العمليات كموارد `genoffice://guide/*`، لذا لا حاجة لأي مهارة؛
+يمكن للمهارة وخادم MCP التعايش معًا، ويختار المساعد أحدهما. الميزات
+السحابية (`search`، `image`، `media`) لا تزال تمرّ عبر المزوِّد المُعدّ في
+GenOffice؛ أما كل شيء آخر فيعمل محليًا، ويحصر `GENOFFICE_ALLOWED_ROOTS` كل
+أداة ضمن المجلدات التي تحدّدها.
+
+عرض الطاقة المتجدّدة في العرض التوضيحي أعلاه هو ما يبدو عليه توجيه واحد في
+Claude Code، مع تفعيل خادم MCP الخاص بـ `genoffice` فقط، من جهة البروتوكول:
+
+```text
+capabilities · guide(slides, spec) · guide(slides, design)
+search(query) ×4                         → IEA, BNEF and IRENA figures for the slides
+search(query, images) ×7 · media(url, ask) ×7
+                                         → candidate photos, each one checked to be a real photograph
+deck_start(dir, style, outline)          → outline checked: 8 pages to write
+deck_page(dir, 0, page) … deck_page(dir, 7, page)
+                                         → each page checked against the outline and the palette; one page sent again
+deck_build(dir, out)                     → renewables-2026.pptx, no image failures
+slides_audit(file) · slides_render(file, out)
+                                         → no layout findings; 8 PNGs come back as image content
+deck_replace(dir, n, page) ×3 · slides_render(file, out)
+                                         → three pages fixed after looking at the renders
+```
+
+ثمانية وثلاثون استدعاءً، في نحو ثلاث عشرة دقيقة، دون أن يلمس المساعد أي طرفية:
+الرسوم البيانية والصور وكل الأدلة والفحوصات والعروض المصيَّرة انتقلت كنتائج
+لاستدعاءات أدوات MCP. غادر الجهاز فقط `search` و`media`، إلى المزوّد المهيَّأ
+في GenOffice.
 
 <a id="download"></a>
 
@@ -358,6 +531,18 @@ Settings → AI Media & Search.
 إلى عناصر Word حقيقية: عناوين، وفقرات، وقوائم، وجداول، وبطاقات، وصفوف مؤشرات
 أداء، وحقول نماذج، وخلفيات صفحات؛ ولا تُضمَّن كصور إلا العناصر البصرية التي لا
 نظير لها في Word (كالرسوم البيانية والأيقونات والصناديق المزخرفة).
+
+</details>
+
+<details>
+<summary><b>هل يمكنني تشغيل GenOffice من Claude Code أو Codex أو Cursor أو من سكربت؟</b></summary>
+
+نعم. يثبّت GenOffice سطر أوامر `genoffice` يشغّل المحرّكات نفسها دون واجهة
+رسومية: افحص المستندات وحوّلها وأنشئها واقرأها وحرّرها من الطرفية أو من
+سكربت، مع مخرجات `--json` للبرامج. وتعلّم مهارة الوكيل المرفقة Claude Code
+وCodex وCursor وGemini CLI وGitHub Copilot وOpenCode وWindsurf استخدامه؛ ثبّتها
+من **الإعدادات → التكاملات**. راجع
+[سطر الأوامر ومهارة الوكيل](#command-line-and-agent-skill).
 
 </details>
 

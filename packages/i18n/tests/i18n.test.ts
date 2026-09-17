@@ -120,6 +120,12 @@ describe('format', () => {
     expect(format('{a} and {b}', { a: 'x' })).toBe('x and {b}')
     expect(format('no params')).toBe('no params')
   })
+
+  it('does not leak prototype properties into placeholders', () => {
+    expect(format('{toString}', {})).toBe('{toString}')
+    expect(format('{constructor} and {valueOf}', {})).toBe('{constructor} and {valueOf}')
+    expect(format('{n}', { n: 1 })).toBe('1')
+  })
 })
 
 describe('macShortcutsToWin', () => {

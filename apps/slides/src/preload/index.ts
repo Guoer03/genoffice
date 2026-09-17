@@ -4,6 +4,7 @@ import type { IpcRendererEvent } from 'electron'
 import type { RenderSlide } from '@genoffice/pptx-render'
 import type { ProjectApi } from '@genoffice/project-store'
 import { installDropOpenBridge } from '@genoffice/electron-utils/drop-open'
+import { installFilesPaneBridge } from '@genoffice/electron-utils/files-pane-bridge'
 import type {
   AddChartOp,
   AddElementOp,
@@ -136,6 +137,9 @@ const api: SlidesApi = {
   openPptx: (fitWidthPx) => ipcRenderer.invoke('slides:open', fitWidthPx),
   openPptxPath: (path, fitWidthPx) => ipcRenderer.invoke('slides:open-path', path, fitWidthPx),
   consumePendingOpen: (fitWidthPx) => ipcRenderer.invoke('slides:consume-pending-open', fitWidthPx),
+  consumeHeadlessExport: () => ipcRenderer.invoke('slides:consume-headless-export'),
+  headlessExportDone: (result: { ok: boolean; error?: string }) =>
+    ipcRenderer.send('slides:headless-export-done', result),
   newBlank: (fitWidthPx) => ipcRenderer.invoke('slides:new-blank', fitWidthPx),
   landGeneratedPages: (
     pageMarkers: string[],
@@ -372,7 +376,10 @@ const api: SlidesApi = {
     ipcRenderer.invoke('ai:image-search', query, maxResults),
   insertImageUrl: (op: {
     slideIndex: number
-    url: string
+    url?: string
+    /** raw base64 of a user attachment (attachment:// reference) — no network fetch */
+    base64?: string
+    ext?: string
     xPx: number
     yPx: number
     wPx: number
@@ -382,7 +389,10 @@ const api: SlidesApi = {
   replacePictureUrl: (op: {
     slideIndex: number
     sourceId: string
-    url: string
+    url?: string
+    /** raw base64 of a user attachment (attachment:// reference) — no network fetch */
+    base64?: string
+    ext?: string
     keepSrcRect?: boolean
   }) => ipcRenderer.invoke('ai:replace-picture-url', op),
   generateImage: (op: {
@@ -391,6 +401,7 @@ const api: SlidesApi = {
     referenceImageUrls?: string[]
     aspectRatio?: string
     imageSize?: string
+    transparentBackground?: boolean
   }) => ipcRenderer.invoke('ai:generate-image', op),
   analyzeMedia: (op: { mediaUrls: string[]; requirements: string }) =>
     ipcRenderer.invoke('ai:analyze-media', op),
@@ -475,15 +486,10 @@ const projectApi: ProjectApi = {
   appendChat: (args) => ipcRenderer.invoke('project:appendChat', args),
   loadChat: (args) => ipcRenderer.invoke('project:loadChat', args),
   rebindChat: (args) => ipcRenderer.invoke('project:rebindChat', args),
-  // P1 extensions
-  listProjects: () => ipcRenderer.invoke('project:list'),
-  createProject: (args) => ipcRenderer.invoke('project:create', args),
-  renameProject: (args) => ipcRenderer.invoke('project:rename', args),
-  deleteProject: (args) => ipcRenderer.invoke('project:delete', args),
-  moveFile: (args) => ipcRenderer.invoke('project:moveFile', args),
-  getTimeline: (args) => ipcRenderer.invoke('project:timeline', args),
 }
 contextBridge.exposeInMainWorld('projectApi', projectApi)
 
 // open documents dragged from the OS onto this tab as a new shell tab
 installDropOpenBridge()
+// folder tree over the default save folder (Files pane)
+installFilesPaneBridge()

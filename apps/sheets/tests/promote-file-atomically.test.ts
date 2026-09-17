@@ -1,7 +1,7 @@
 /**
  * Saving promotes a same-directory temp file over the target with rename.
  * Windows AV/indexer/cloud-sync locks make that rename fail transiently with
- * EPERM/EACCES/EBUSY (alpha: "EPERM: operation not permitted, rename
+ * EPERM/EACCES/EBUSY (user report: "EPERM: operation not permitted, rename
  * .tmp.xlsx → …"), so the promotion retries, falls back to an in-place copy,
  * and surfaces a stable, localizable message when the target stays locked.
  */
@@ -19,7 +19,7 @@ import {
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { promoteFileAtomically } from '../src/gateway/xlsx-package-io'
+import { promoteFileAtomically } from '@genoffice/xlsx-gateway/gateway/xlsx-package-io'
 
 vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs/promises')>()

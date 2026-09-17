@@ -39,6 +39,32 @@ describe('inlineToRuns hard break after atomic runs', () => {
   })
 })
 
+describe('Zotero field conversion', () => {
+  it('preserves one field id and its cross-paragraph boundaries', () => {
+    const instruction = 'ADDIN ZOTERO_BIBL {} CSL_BIBLIOGRAPHY'
+    const parts = ['begin', 'inside', 'end'] as const
+    const inline = parts.map(
+      (part, index) =>
+        runsToInline([
+          {
+            text: `Reference ${index + 1}`,
+            instrField: instruction,
+            zoteroFieldId: 17,
+            zoteroFieldPart: part,
+          },
+        ])[0],
+    )
+
+    const marks = inline.map((node) => node.marks?.find((mark) => mark.type === 'instrField'))
+    expect(marks.map((mark) => mark?.attrs?.fieldId)).toEqual([17, 17, 17])
+    expect(marks.map((mark) => mark?.attrs?.fieldPart)).toEqual(parts)
+
+    const runs = inline.map((node) => inlineToRuns([node])[0])
+    expect(runs.map((run) => run.zoteroFieldId)).toEqual([17, 17, 17])
+    expect(runs.map((run) => run.zoteroFieldPart)).toEqual(parts)
+  })
+})
+
 describe('runsToInline image runs', () => {
   it('keeps sibling w:t text on a run that also carries a drawing', () => {
     const runs = [
@@ -62,6 +88,7 @@ describe('runsToInline image runs', () => {
           wrap: null,
           offsetXEmu: null,
           offsetYEmu: null,
+          relV: null,
           wrapDistTopEmu: null,
           wrapDistBottomEmu: null,
           wrapDistLeftEmu: null,
@@ -107,6 +134,7 @@ describe('runsToInline image runs', () => {
           wrap: null,
           offsetXEmu: null,
           offsetYEmu: null,
+          relV: null,
           wrapDistTopEmu: null,
           wrapDistBottomEmu: null,
           wrapDistLeftEmu: null,
@@ -408,13 +436,14 @@ describe('paragraph border color/width round trip', () => {
     rawPPr:
       '<w:pPr><w:pBdr><w:bottom w:val="single" w:sz="18" w:space="1" w:color="4472C4"/></w:pBdr></w:pPr>',
     runs: [{ text: 'x' }],
-    format: { borders: 'b', borderLines: { b: { color: '4472C4', szPt: 2.25 } } },
+    // the parser keeps a declared positive w:space as spacePt (an omitted/0 one stays undeclared)
+    format: { borders: 'b', borderLines: { b: { color: '4472C4', szPt: 2.25, spacePt: 1 } } },
   }
 
   it('borderLines survive PM attrs and do not dirty the block', () => {
     const doc = blocksToPmDoc([block])
     expect(doc.content?.[0].attrs?.borderLines).toBe(
-      JSON.stringify({ b: { color: '4472C4', szPt: 2.25 } }),
+      JSON.stringify({ b: { color: '4472C4', szPt: 2.25, spacePt: 1 } }),
     )
     const plan = pmDocToSavePlan(doc, [block])
     expect(plan.changedCount).toBe(0)
@@ -430,7 +459,9 @@ describe('paragraph border color/width round trip', () => {
     const plan = pmDocToSavePlan(doc, [block])
     const saved = plan.saveBlocks[0]
     if (saved.kind !== 'generated') throw new Error(`expected generated, got ${saved.kind}`)
-    expect(saved.block.format?.borderLines).toEqual({ b: { color: '4472C4', szPt: 2.25 } })
+    expect(saved.block.format?.borderLines).toEqual({
+      b: { color: '4472C4', szPt: 2.25, spacePt: 1 },
+    })
     expect(saved.block.rawPPr).toContain(
       '<w:bottom w:val="single" w:sz="18" w:space="1" w:color="4472C4"/>',
     )

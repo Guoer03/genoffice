@@ -31,6 +31,10 @@ import {
   installWrapMeasureLifecycle,
 } from './univer-sync'
 import {
+  pollUntilReady,
+  runHeadlessRendererExport,
+} from '@genoffice/electron-utils/headless-export'
+import {
   installJournalSuppressionUndoFilter,
   installLoadAutoHeightGate,
   journalSuppression,
@@ -109,8 +113,12 @@ import {
 } from '@genoffice/agent-core'
 import { registerClaudeCodeToolExecHandler } from '@genoffice/ai-provider/claude-code-bridge'
 import { imageGenerationAvailable, type AiSettings } from '@genoffice/ai-provider/browser'
-import { type WorkbookOperation } from '../domain/workbook-dsl'
-import { columnLabel, parseAddress, rangeCellCount } from '../domain/cell-address'
+import { type WorkbookOperation } from '@genoffice/xlsx-gateway/domain/workbook-dsl'
+import {
+  columnLabel,
+  parseAddress,
+  rangeCellCount,
+} from '@genoffice/xlsx-gateway/domain/cell-address'
 import { aggregateWorkbookRange } from './ai/aggregate-range'
 import { collectCellFormulaTexts, quadraticFormulaError } from './formula-cost'
 import {
@@ -119,9 +127,9 @@ import {
   chartSupportsSeriesReplace,
   withDefaultBarLabels,
   type CellBounds,
-} from '../domain/chart-visual'
-import { InMemoryWorkbookAdapter } from '../domain/in-memory-workbook'
-import { cfRuleUnsaveableReason, iconSetSaveable } from '../gateway/xlsx-cf'
+} from '@genoffice/xlsx-gateway/domain/chart-visual'
+import { InMemoryWorkbookAdapter } from '@genoffice/xlsx-gateway/domain/in-memory-workbook'
+import { cfRuleUnsaveableReason, iconSetSaveable } from '@genoffice/xlsx-gateway/gateway/xlsx-cf'
 import { installLazyFindBridge } from './lazy-find'
 import { installReplaceAutoSearch } from './replace-autosearch'
 import {
@@ -130,7 +138,7 @@ import {
   storeCrossHighlightPreference,
   type CrossHighlightHandle,
 } from './cross-highlight'
-import type { ApplyOutcome, ChangePlan } from '../domain/workbook.types'
+import type { ApplyOutcome, ChangePlan } from '@genoffice/xlsx-gateway/domain/workbook.types'
 import { createElectronTransport } from './ai/transport'
 import {
   MAX_READ_RANGE_CELLS,
@@ -237,11 +245,13 @@ import {
   type SlicerPickerState,
   type TimelinePickerState,
 } from './pivot-actions'
-import type { ChartRecommendations } from '../domain/chart-recommend'
+import type { ChartRecommendations } from '@genoffice/xlsx-gateway/domain/chart-recommend'
 import {
+  cellAtClientPoint,
   handleInsertChart as handleInsertChartImpl,
   handleInsertEquation as handleInsertEquationImpl,
   handleInsertIcon as handleInsertIconImpl,
+  handleInsertPictureFile,
   handleInsertScreenshot,
   handleRecommendedCharts as handleRecommendedChartsImpl,
   type VisualActionContext,
@@ -268,9 +278,11 @@ import {
   installFormulaViewInterceptor,
 } from './formula-view'
 import { installCachedValueFallbackInterceptor } from './formula-cached-fallback'
+import { readLiveFunctionInfos } from './function-catalog'
 import { installSupportedFunctionProbe } from './function-registry-probe'
 import { installCellFilenameFunction } from './cell-function'
 import { installFormulaLexerFix } from './formula-lexer-fix'
+import { installErrorValueAlignment } from './error-value-align'
 import { installFormulaNewlineDisplay } from './formula-newline-display'
 import { installCfDisplayKeyCompare } from './cf-duplicate-key'
 import { installCfFormulaFold } from './cf-formula-fold'
@@ -300,6 +312,7 @@ import { installCopyMaterialize } from './copy-materialize'
 import { applyUniverLocale, insertRowsBelowLocale, numberAsTextAlertLocale } from './univer-locales'
 import { installRuleDetail } from './univer-rule-detail'
 import { installActiveCellDataValidationChrome } from './data-validation-dropdown'
+import { installInvalidDataMarkerSuppression } from './data-validation-marker'
 import { installFormulaNullResultFix } from './formula-null-result'
 import { installNumberFormatFix } from './numfmt-fix'
 import { installIfsEmptySetFix } from './ifs-empty-set'
@@ -313,6 +326,7 @@ import {
   handleApplyHeaderFooter as handleApplyHeaderFooterImpl,
   handleExportPdf as handleExportPdfImpl,
   handlePageLayoutCommand as handlePageLayoutCommandImpl,
+  handlePrint as handlePrintImpl,
   type PageLayoutContext,
 } from './page-layout-actions'
 import { handleExportCsv as handleExportCsvImpl, type CsvExportContext } from './csv-export'
@@ -363,6 +377,7 @@ import { AdvancedFilterDialog, type AdvancedFilterColumn } from './AdvancedFilte
 import { EquationDialog } from './EquationDialog'
 import { IconsDialog } from './IconsDialog'
 import { RecommendedChartsDialog } from './RecommendedChartsDialog'
+import { installPictureTransfer } from './picture-paste'
 import { ScreenshotDialog } from './ScreenshotDialog'
 import { SymbolDialog } from './SymbolDialog'
 import {
@@ -391,6 +406,7 @@ import {
   type ShapeEditChanges,
 } from './WorkbookVisuals'
 import { ChartFormatPane, SelectDataDialog } from './ChartPanels'
+import { handleSheetsControl, type ControlRequest } from './control'
 
 // Source sheet id of an in-flight copy-sheet command; the next insert-sheet
 // mutation is that copy and must journal as a duplicate, not a blank add.
@@ -554,7 +570,7 @@ export function App(): React.JSX.Element {
     () => window.desktopApi?.onRecoveryPrompt?.((prompt) => setRecoveryPrompt(prompt)) ?? undefined,
     [],
   )
-  /// Streaming-mode filter gate (alpha r166/r169): the filter panel builds
+  /// Streaming-mode filter gate: the filter panel builds
   /// value counts from whatever happens to be loaded and the apply command is
   /// cancelled, so instead of a silent no-op the user gets an explicit offer
   /// to fully load the workbook first.
@@ -718,9 +734,63 @@ export function App(): React.JSX.Element {
       setMessage,
       setPendingEdits,
       refreshPageBreakPreview,
+      requestVisualInstall: () => {
+        const runtime = univerRef.current
+        if (!runtime) return
+        queueVisualInstall(
+          runtime,
+          lazyWorkbookRef,
+          visualDisposablesRef,
+          visualInstallTimerRef,
+          chartEditRef,
+          chartVectorRef,
+          shapeEditRef,
+        )
+      },
       runOps: runUiOps,
     }
   }
+
+  // Headless export mode (--headless-export): this renderer lives in a hidden
+  // window whose only job is to run the ribbon's own PDF export against a path
+  // the CLI chose, then report back so the main process can quit.
+  const headlessExportStartedRef = useRef(false)
+  useEffect(() => {
+    if (headlessExportStartedRef.current) return
+    headlessExportStartedRef.current = true
+    void (async () => {
+      const outPath = (await window.desktopApi?.consumeHeadlessExport?.()) ?? null
+      if (!outPath) return
+      const report = await runHeadlessRendererExport(
+        outPath,
+        async () => {
+          await pollUntilReady(() => lazyWorkbookRef.current !== null, 'no workbook opened', {
+            timeoutMs: 300_000,
+          })
+          // The PDF layout needs every cell in the grid. Workbooks small enough
+          // for formula mode preload themselves; a larger one waits for the
+          // user's "Full Load" click, which headless has to make itself.
+          await pollUntilReady(
+            () => {
+              const state = lazyWorkbookRef.current
+              if (!state) return false
+              if (state.flags.preloadComplete) return true
+              const runtime = univerRef.current
+              if (runtime && !state.flags.preloadRunning) {
+                void preloadEntireWorkbook(runtime, lazyWorkbookRef, setMessage)
+              }
+              return false
+            },
+            'workbook never finished loading',
+            { timeoutMs: 540_000, pollMs: 500 },
+          )
+        },
+        (target) => handleExportPdfImpl(pageLayoutContext(), target),
+      )
+      window.desktopApi?.headlessExportDone?.(report)
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once per renderer; reads the latest state through refs
+  }, [])
 
   function csvExportContext(): CsvExportContext {
     return {
@@ -1560,6 +1630,7 @@ export function App(): React.JSX.Element {
       runtime,
       () => lazyWorkbookRef.current?.file.date1904 === true,
     )
+    const errorAlignDisposable = installErrorValueAlignment(runtime)
     // CELL("filename") resolves the session's on-disk path; converted
     // imports (needsSaveAs) count as never-saved, like Excel.
     const cellFilenameDisposable = installCellFilenameFunction(runtime, () => {
@@ -1626,6 +1697,8 @@ export function App(): React.JSX.Element {
     const copyMaterializeDisposable = installCopyMaterialize(runtime, lazyWorkbookRef, setMessage)
     // Validation dropdowns and input messages follow the active cell, matching Excel.
     const dataValidationChromeDisposable = installActiveCellDataValidationChrome(runtime)
+    // Excel shows no invalid-data marker until Circle Invalid Data is run.
+    const dataValidationMarkerDisposable = installInvalidDataMarkerSuppression(runtime)
     // Univer's own UI (rule-management panels, dialogs) follows the app
     // language instead of hard-coded English.
     void applyUniverLocale(runtime, getLang())
@@ -1854,6 +1927,7 @@ export function App(): React.JSX.Element {
               cellValue?: unknown
               range?: IRange
               ranges?: IRange[]
+              order?: Record<number, number>
               name?: string
               sheet?: { id?: string; name?: string }
             }
@@ -2074,7 +2148,7 @@ export function App(): React.JSX.Element {
         if (event.id === SET_ZOOM_OPERATION || event.id === SET_ZOOM_COMMAND) {
           // Excel persists the normal-view zoom in the file; without this the
           // save keeps the stored zoom and the post-save session reload snaps
-          // the view back to it (alpha r165).
+          // the view back to it.
           const zoom = event.params as { subUnitId?: string; zoomRatio?: number } | undefined
           if (
             zoom?.subUnitId &&
@@ -2091,7 +2165,7 @@ export function App(): React.JSX.Element {
         }
         if (event.id === REORDER_RANGE_MUTATION) {
           if (params.range) {
-            journalRangeSnapshot(runtime, state, params.subUnitId, params.range)
+            journalRangeSnapshot(runtime, state, params.subUnitId, params.range, params.order)
             // Sorted cells feed charts too, same as value mutations.
             queueChartDataSync(params.subUnitId, params.range)
             setPendingEdits(journalSize(state.editJournal))
@@ -2388,12 +2462,12 @@ export function App(): React.JSX.Element {
           // even without live formulas — after a full preload it unlocks.
           // The panel itself is also gated: opened mid-stream it builds its
           // by-value counts from whatever happens to be loaded and reports
-          // them as the column's content (alpha r169: 24 rows of a value
+          // them as the column's content (24 rows of a value
           // whose real count was 125, 2 008 phantom blanks).
           if (isFilter && !isAddedSheet && !state.flags.preloadComplete) {
             event.cancel = true
-            // A silent footer note read as "filtering is broken" (alpha
-            // r166) — raise an explicit offer to fully load instead.
+            // A silent footer note read as "filtering is broken" — raise an
+            // explicit offer to fully load instead.
             if (fullLoadRunning.current || state.formulaMode) {
               // formula-mode workbooks preload automatically at open — the
               // gate only holds during that brief window
@@ -2503,7 +2577,7 @@ export function App(): React.JSX.Element {
           // sheet-scoped defined names — reject before the copy so the user
           // never sees Duplicate succeed and ⌘S fail. The sidecar flag covers
           // hidden and _xlnm.* built-ins the modeled definedNames omit
-          // (bugbot); the scan remains as the older-sidecar fallback.
+          // entirely; the scan remains as the older-sidecar fallback.
           const sourceIndex = state.file.sheets.findIndex((candidate) => candidate.id === subUnitId)
           const scopedNames =
             sheet?.hasScopedDefinedNames ??
@@ -2532,6 +2606,13 @@ export function App(): React.JSX.Element {
       window.desktopApi?.onCloseSaveRequest?.(() => void closeSaveRef.current()) ??
       (() => undefined)
     const gridHost = document.getElementById('univer-container')
+    const disposePictureTransfer = gridHost
+      ? installPictureTransfer(gridHost, {
+          isCellEditing: () => editingCellRef.current,
+          cellAtPoint: (x, y) => cellAtClientPoint(runtime, x, y),
+          insert: (file, anchor) => handleInsertPictureFile(visualContext(), file, anchor),
+        })
+      : () => undefined
     let selectionAskRaf: number | null = null
     let selectionAskSettleRaf: number | null = null
     let selectionAskSettling = false
@@ -2688,6 +2769,7 @@ export function App(): React.JSX.Element {
       formulaNewlineDisposable.dispose()
       functionProbeDisposable.dispose()
       numberFormatFixDisposable.dispose()
+      errorAlignDisposable.dispose()
       cellFilenameDisposable.dispose()
       rateFallbackDisposable.dispose()
       ifsEmptySetDisposable.dispose()
@@ -2702,6 +2784,7 @@ export function App(): React.JSX.Element {
       nullResultDisposable.dispose()
       copyMaterializeDisposable.dispose()
       dataValidationChromeDisposable.dispose()
+      dataValidationMarkerDisposable.dispose()
       ruleDetailDisposable()
       lazyFindDisposable.dispose()
       replaceAutoSearchDisposable.dispose()
@@ -2721,6 +2804,7 @@ export function App(): React.JSX.Element {
       clickDisposable.dispose()
       if (contentTimer) clearTimeout(contentTimer)
       contentDisposable.dispose()
+      disposePictureTransfer()
       gridHost?.removeEventListener('pointerdown', onSelectionPointerDown, true)
       window.removeEventListener('pointermove', onSelectionPointerMove, true)
       window.removeEventListener('pointerup', finishSelectionPointer, true)
@@ -3483,7 +3567,10 @@ export function App(): React.JSX.Element {
     let scope: FrozenSelection
     try {
       const extent = sheetDataExtent(worksheet)
-      const clamped = clampBoundsToExtent(bounds, extent)
+      const clamped = clampBoundsToExtent(bounds, extent, {
+        rowCount: worksheet.getMaxRows(),
+        columnCount: worksheet.getMaxColumns(),
+      })
       // Display text, so a date header names itself rather than its serial.
       const columns = columnScopeHeaders(clamped, extent, (column) =>
         String(worksheet.getRange(0, column, 1, 1).getDisplayValue() ?? ''),
@@ -3876,6 +3963,8 @@ export function App(): React.JSX.Element {
   menuActionRef.current = (action) => {
     if (action === 'open') {
       void handleInspectWorkbook()
+    } else if (action === 'print') {
+      void handlePrintImpl(pageLayoutContext())
     } else if (action === 'export-pdf') {
       void handleExportPdfImpl(pageLayoutContext())
     } else if (action === 'export-csv') {
@@ -4015,6 +4104,16 @@ export function App(): React.JSX.Element {
     }
   })()
 
+  // genoffice CLI (`open --range`, `selection`): the shell evaluates this hook
+  useEffect(() => {
+    ;(window as unknown as Record<string, unknown>).__genofficeControl = (req: ControlRequest) =>
+      handleSheetsControl(
+        req,
+        univerRef.current?.univerAPI.getActiveWorkbook(),
+        lazyWorkbookRef.current !== null,
+      )
+  })
+
   const aiScopeChip = resolveScopeChip(aiRunScope, aiScope, aiScopeDismissed)
 
   return (
@@ -4134,6 +4233,11 @@ export function App(): React.JSX.Element {
         canSave={pendingEdits > 0}
         onSave={() => void handleSave('save')}
         canSaveAs={workbookFile !== null}
+        workbookPath={
+          workbookFile && !workbookFile.needsSaveAs
+            ? (workbookFile.csvPath ?? workbookFile.path ?? null)
+            : null
+        }
         onSaveAs={() => void handleSave('save-as')}
         onRedo={handleRedo}
         autoSave={autoSave}
@@ -4148,7 +4252,7 @@ export function App(): React.JSX.Element {
         onApplyProtectedRanges={applyProtectedRanges}
         onGetDefinedNames={definedNameRows}
         onDefinedNameAction={handleDefinedNameAction}
-        onGetPivotFields={() => pivotFieldOptionsImpl(pivotContext())}
+        onGetPivotFields={(sourceRange) => pivotFieldOptionsImpl(pivotContext(), sourceRange)}
         onGetSourceRange={() => getSourceRangeImpl(pivotContext())}
         onCreatePivot={(config) => handleCreatePivotImpl(pivotContext(), config)}
         onGetPivotEditSeed={() => pivotEditInitialImpl(pivotContext())}
@@ -4161,6 +4265,10 @@ export function App(): React.JSX.Element {
         onGoToReference={(ref) => goToReferenceImpl(dataToolsContext(), ref)}
         onListDefinedNames={() => listDefinedNamesImpl(dataToolsContext())}
         onApplyFormula={(formula) => handleApplyFormulaImpl(dataToolsContext(), formula)}
+        onListFunctions={() => {
+          const runtime = univerRef.current
+          return runtime ? readLiveFunctionInfos(runtime) : []
+        }}
         onCreateSubtotal={(config) => handleCreateSubtotalImpl(dataToolsContext(), config)}
         onCreateConsolidate={(config) => handleCreateConsolidateImpl(dataToolsContext(), config)}
         onGetConsolidateDefault={() => consolidateDefaultReferenceImpl(dataToolsContext())}

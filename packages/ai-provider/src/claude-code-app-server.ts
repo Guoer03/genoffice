@@ -257,8 +257,10 @@ class ClaudeCodeAcpClient {
   private idleTimer: ReturnType<typeof setTimeout> | undefined
   /** Per-run activity tap: any stdout line touches the stream watchdog so the
    *  connect timeout (which the ACP transport can't hit via "headers") is reset
-   *  by initialize/session-new/session-update responses alike. Set per withClient use. */
-  onActivity?: () => void
+   *  by initialize/session-new/session-update responses alike. Set per withClient use.
+   *  Explicit `| undefined` (not `?`) so sheets' exactOptionalPropertyTypes allows
+   *  the per-run clear (`= undefined`) in withClient. */
+  onActivity: (() => void) | undefined
 
   constructor(
     readonly adapterPath: string,

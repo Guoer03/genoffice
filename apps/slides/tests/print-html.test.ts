@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { buildPrintDocumentHtml, parsePrintRange, printPageCount } from '../src/shared/print-html'
+import {
+  buildPrintDocumentHtml,
+  normalizePrintRatio,
+  parsePrintRange,
+  printPageCount,
+} from '../src/shared/print-html'
 
 const srcs = (n: number) => Array.from({ length: n }, (_x, i) => `blob:img-${i}`)
 
@@ -16,6 +21,19 @@ describe('parsePrintRange', () => {
     expect(parsePrintRange('0-2', 5)).toBeNull()
     expect(parsePrintRange('4-2', 5)).toBeNull()
     expect(parsePrintRange('6', 5)).toBeNull()
+  })
+
+  it('accepts spaces around dashes', () => {
+    expect(parsePrintRange('1 - 3', 5)).toEqual([0, 1, 2])
+    expect(parsePrintRange('1 – 3, 5', 5)).toEqual([0, 1, 2, 4])
+  })
+
+  it('accepts em-dash, tilde, fullwidth tilde and wave dash (IME variants)', () => {
+    expect(parsePrintRange('1—3', 5)).toEqual([0, 1, 2])
+    expect(parsePrintRange('1~3', 5)).toEqual([0, 1, 2])
+    expect(parsePrintRange('1～3', 5)).toEqual([0, 1, 2])
+    expect(parsePrintRange('1〜3', 5)).toEqual([0, 1, 2])
+    expect(parsePrintRange('1 — 3, 5～6', 6)).toEqual([0, 1, 2, 4, 5])
   })
 
   it('accepts spaces around dashes', () => {
@@ -102,5 +120,30 @@ describe('buildPrintDocumentHtml', () => {
     })
     expect(html).toContain("content: counter(pg) ' / 3';")
     expect(html).toContain('counter-reset: pg;')
+  })
+})
+
+describe('normalizePrintRatio', () => {
+  it('keeps real slide formats exact', () => {
+    expect(normalizePrintRatio(16 / 9)).toBe(16 / 9)
+    expect(normalizePrintRatio(4 / 3)).toBe(4 / 3)
+    expect(normalizePrintRatio(16 / 10)).toBe(16 / 10)
+  })
+
+  it('falls back to 16:9 for non-finite and non-positive ratios', () => {
+    for (const bad of [Number.NaN, Number.POSITIVE_INFINITY, 0, -1.5]) {
+      expect(normalizePrintRatio(bad)).toBe(16 / 9)
+      const html = buildPrintDocumentHtml({ srcs: srcs(1), ratio: bad, layout: 'full' })
+      expect(html).toContain('@page { size: 13.333in 7.5in; margin: 0; }')
+      expect(html).not.toContain('NaNin')
+      expect(html).not.toContain('Infinityin')
+    }
+  })
+
+  it('clamps absurd ratios so @page stays printable', () => {
+    const tiny = buildPrintDocumentHtml({ srcs: srcs(1), ratio: 0.01, layout: 'full' })
+    expect(tiny).toContain('@page { size: 1.5in 7.5in; margin: 0; }')
+    const huge = buildPrintDocumentHtml({ srcs: srcs(1), ratio: 100, layout: 'full' })
+    expect(huge).toContain('@page { size: 37.5in 7.5in; margin: 0; }')
   })
 })

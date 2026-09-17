@@ -340,6 +340,8 @@ export interface Props {
   zoom: number
   onZoom: (z: number | ((current: number) => number)) => void
   showThumbs: boolean
+  filesOpen: boolean
+  onToggleFiles: () => void
   onToggleThumbs: () => void
   aiOpen: boolean
   onToggleAi: () => void
@@ -422,8 +424,12 @@ export interface Props {
   slideSizeKey: '16:9' | '4:3' | null
   /** Element-level paragraph format (bullets/numbering/line spacing) */
   onParagraphFormat: (patch: {
-    bullet?: 'char' | 'number' | 'none'
+    bullet?: 'char' | 'number' | 'blip' | 'none'
     bulletChar?: string
+    bulletFont?: string
+    numType?: string
+    startAt?: number
+    bulletImage?: { base64: string; ext: string }
     bulletHangEmu?: number
     bulletSizePct?: number
     bulletColor?: string
@@ -718,7 +724,7 @@ export interface RibbonTabCtx extends Pick<
   setSizeOpen: Dispatch<SetStateAction<boolean>>
   setSlideShowFromStart: Dispatch<SetStateAction<boolean>>
   setSlideShowOpen: Dispatch<SetStateAction<boolean>>
-  setTableCustom: Dispatch<SetStateAction<{ r: number; c: number }>>
+  setTableDialogOpen: Dispatch<SetStateAction<boolean>>
   setTableHover: Dispatch<SetStateAction<{ r: number; c: number }>>
   setTableOpen: Dispatch<SetStateAction<boolean>>
   sizeDraft: string | null
@@ -727,7 +733,7 @@ export interface RibbonTabCtx extends Pick<
   slideShowFromStart: boolean
   slideShowOpen: boolean
   t: ReturnType<typeof useI18n>['t']
-  tableCustom: { r: number; c: number }
+  tableDialogOpen: boolean
   tableHover: { r: number; c: number }
   tableOpen: boolean
 }

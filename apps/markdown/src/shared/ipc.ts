@@ -19,9 +19,13 @@ export const MARKDOWN_CHANNELS = {
   pickImage: 'markdown:pick-image',
   saveImage: 'markdown:save-image',
   readImage: 'markdown:read-image',
+  saveImageAs: 'markdown:save-image-as',
+  viewImage: 'genoffice:view-image',
   exportRequest: 'markdown:export-request',
   exportDocx: 'markdown:export-docx',
   exportPdf: 'markdown:export-pdf',
+  consumeHeadlessExport: 'markdown:consume-headless-export',
+  headlessExportDone: 'markdown:headless-export-done',
   printRequest: 'markdown:print-request',
   aiGenerateImage: 'markdown:ai-generate-image',
   getLanguage: 'app:get-language',
@@ -109,6 +113,8 @@ export interface ExportPdfRequest {
   /** self-contained print HTML */
   html: string
   suggestedName: string
+  /** headless export mode only: write here instead of opening the save dialog */
+  outPath?: string
 }
 
 export type ExportResult =
@@ -123,6 +129,10 @@ export interface ImageData {
 export interface MarkdownApi {
   /** Take the md path pending for this view (queued at tab creation); null = new untitled document */
   consumePending(): Promise<string | null>
+  /** Headless export mode: the PDF path this hidden renderer must export to, null in normal use */
+  consumeHeadlessExport(): Promise<string | null>
+  /** Headless export mode: report the export outcome so the main process can quit */
+  headlessExportDone(result: { ok: boolean; error?: string }): void
   /** Read the file as UTF-8 text. Only paths granted to this view are allowed */
   readFile(path: string): Promise<string>
   /**
@@ -158,6 +168,10 @@ export interface MarkdownApi {
    * inside the document's directory are allowed; anything else returns null.
    */
   readImage(src: string): Promise<ImageData | null>
+  /** Save a displayed image (md-asset://, data: or remote URL) through a Save dialog */
+  saveImageAs(src: string): Promise<{ ok: boolean; path?: string; error?: string }>
+  /** Native context menu "View Image" → renderer opens the viewer */
+  onViewImage(handler: (src: string) => void): () => void
   /** Shell menu export → renderer serializes and calls exportDocx/exportPdf */
   onExportRequest(handler: (format: ExportFormat) => void): () => void
   /** Shell menu Print → renderer builds the print HTML and opens the system print dialog */

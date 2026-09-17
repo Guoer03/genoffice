@@ -9,6 +9,7 @@ import {
   type SaveBlock,
 } from '../src/index'
 import { buildDocx } from './helpers/build-docx'
+import { parseNotesXml } from '../src/notes'
 
 const XML_DECL = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n'
 
@@ -46,6 +47,42 @@ const originalOrder = (doc: Awaited<ReturnType<typeof parseDocx>>): SaveBlock[] 
   doc.blocks
     .filter((b) => !b.hidden && b.docxIndex !== null)
     .map((b) => ({ kind: 'original', docxIndex: b.docxIndex! }))
+
+describe('single-quoted note attributes', () => {
+  it('skips single-quoted separators and reads single-quoted ids', () => {
+    const xml =
+      XML_DECL +
+      '<w:footnotes xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+      "<w:footnote w:type='separator' w:id='-1'><w:p><w:r><w:separator/></w:r></w:p></w:footnote>" +
+      "<w:footnote w:id='2'><w:p><w:r><w:footnoteRef/></w:r><w:r><w:t>detail</w:t></w:r></w:p></w:footnote>" +
+      '</w:footnotes>'
+    const notes = parseNotesXml(xml, 'footnote')
+    expect(notes.map((n) => [n.id, n.text])).toEqual([['2', 'detail']])
+  })
+})
+
+describe('Zotero fields inside notes', () => {
+  it('flags notes whose body carries a Zotero citation field', () => {
+    const zoteroNote =
+      '<w:footnote w:id="3"><w:p><w:r><w:footnoteRef/></w:r>' +
+      '<w:r><w:fldChar w:fldCharType="begin"/></w:r>' +
+      '<w:r><w:instrText xml:space="preserve"> ADDIN ZOTERO_ITEM CSL_CITATION {} </w:instrText></w:r>' +
+      '<w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>(Doe 2020)</w:t></w:r>' +
+      '<w:r><w:fldChar w:fldCharType="end"/></w:r></w:p></w:footnote>'
+    const cslNote = zoteroNote
+      .replace('w:id="3"', 'w:id="4"')
+      .replace('ADDIN ZOTERO_ITEM CSL_CITATION', 'ADDIN CSL_CITATION')
+    const notes = parseNotesXml(
+      FOOTNOTES_XML.replace('</w:footnotes>', zoteroNote + cslNote + '</w:footnotes>'),
+      'footnote',
+    )
+    expect(notes.map((note) => [note.id, note.zoteroField ?? false])).toEqual([
+      ['2', false],
+      ['3', true],
+      ['4', true],
+    ])
+  })
+})
 
 describe('footnotes / endnotes', () => {
   it('parses word/footnotes.xml and keeps the reference paragraph editable', async () => {
@@ -303,6 +340,27 @@ describe('rich-text footnote display runs', () => {
       { text: ', 2023', fontAscii: 'Garamond' },
     ])
     expect(notes[1].richParas?.[0]).toEqual([{ text: 'font only', fontAscii: 'Arial' }])
+  })
+
+  it('does not bold runs whose b/i carry off, uppercase, or single-quoted falsy vals', async () => {
+    const footnotesXml =
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<w:footnotes xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+      '<w:footnote w:id="1"><w:p>' +
+      '<w:r><w:rPr><w:b w:val="off"/></w:rPr><w:t>plain1</w:t></w:r>' +
+      '<w:r><w:rPr><w:b w:val="OFF"/></w:rPr><w:t>plain2</w:t></w:r>' +
+      `<w:r><w:rPr><w:b w:val='false'/></w:rPr><w:t>plain3</w:t></w:r>` +
+      '<w:r><w:rPr><w:b/></w:rPr><w:t>bold</w:t></w:r>' +
+      '</w:p></w:footnote>' +
+      '</w:footnotes>'
+    const { parseNotesXml } = await import('../src/notes')
+    const notes = parseNotesXml(footnotesXml, 'footnote')
+    expect(notes[0].richParas?.[0]).toEqual([
+      { text: 'plain1' },
+      { text: 'plain2' },
+      { text: 'plain3' },
+      { text: 'bold', bold: true },
+    ])
   })
 
   it('flags notes without a self-reference mark run (Word renders those entries numberless)', async () => {

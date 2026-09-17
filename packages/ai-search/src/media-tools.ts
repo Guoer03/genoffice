@@ -18,12 +18,10 @@ import {
   type LegacyAiSettings,
   type MediaBlob,
 } from '@genoffice/ai-provider'
-import {
-  fetchRemoteImage,
-  fetchWithSsrfGuard,
-  readGeneratedImage,
-  storeGeneratedImage,
-} from '@genoffice/electron-utils'
+// deep imports: the package root re-exports Electron-bound modules, and this file also runs in the genoffice CLI
+import { readGeneratedImage, storeGeneratedImage } from '@genoffice/electron-utils/generated-images'
+import { fetchRemoteImage } from '@genoffice/electron-utils/remote-image'
+import { fetchWithSsrfGuard } from '@genoffice/electron-utils/safe-remote-url'
 
 export const MEDIA_PROVIDER_NOT_CONFIGURED_ERROR =
   'No image/media provider is configured. Set one under Settings (AI Media) to use this tool.'
@@ -87,7 +85,8 @@ export async function loadMediaReference(ref: string): Promise<MediaBlob> {
     if (bytes.byteLength > MAX_MEDIA_BYTES) {
       throw new MediaTooLargeError(`${ref} is too large to analyze`)
     }
-    const ct = resp.headers.get('content-type')?.split(';')[0]?.trim()
+    const rawCt = resp.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase()
+    const ct = rawCt && rawCt !== 'application/octet-stream' ? rawCt : undefined
     const name = basename(new URL(ref).pathname) || undefined
     const mime =
       ct && ct !== 'application/octet-stream' ? ct : MIME_BY_EXT[extname(name ?? '').toLowerCase()]
@@ -119,6 +118,8 @@ export interface GenerateImageOptions {
   aspectRatio?: string
   /** ignored by BYOK providers; kept for call-site compatibility */
   model?: string
+  /** When true, the provider is asked for real PNG alpha (icons/logos/cutouts). */
+  transparentBackground?: boolean
 }
 
 export async function generateImageTool(
@@ -137,6 +138,7 @@ export async function generateImageTool(
       prompt,
       aspectRatio: op.aspectRatio,
       references,
+      transparent: op.transparentBackground === true,
     })
     return { url: storeGeneratedImage(image.bytes, image.mime) }
   } catch (err) {

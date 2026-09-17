@@ -10,12 +10,16 @@ export {
   IconAlignCenter,
   IconAlignLeft,
   IconAlignRight,
+  IconBullets,
   IconCopy,
   IconCrop,
   IconFlipH,
   IconFlipV,
   IconLink,
+  IconLock,
   IconPalette,
+  IconPicture,
+  IconPilcrow,
   IconRedo,
   IconRemoveBg,
   IconReplacePicture,
@@ -24,6 +28,7 @@ export {
   IconSave,
   IconSearch,
   IconSparkle,
+  IconTable,
   IconTrash,
   IconUndo,
   IconWand,
@@ -53,6 +58,52 @@ function Svg({ size = 20, children }: IconProps & { children: ReactNode }) {
     >
       {children}
     </svg>
+  )
+}
+
+export function IconPlus(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M8 3v10M3 8h10" />
+    </Svg>
+  )
+}
+
+/** insert: heading (an H letterform) */
+export function IconHeading(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M4 3v10M12 3v10M4 8h8" />
+    </Svg>
+  )
+}
+
+/** insert: button (a pill with its label line) */
+export function IconButton(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="2" y="5" width="12" height="6" rx="3" />
+      <path d="M5.5 8h5" />
+    </Svg>
+  )
+}
+
+/** insert: section (a block with a heading bar and body text) */
+export function IconSection(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="2.5" y="2.5" width="11" height="11" rx="1" />
+      <path d="M2.5 6h11M5 9h6" />
+    </Svg>
+  )
+}
+
+/** insert: divider (a rule between two text lines) */
+export function IconDivider(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M2.5 8h11M5 4.5h6M5 11.5h6" />
+    </Svg>
   )
 }
 
@@ -161,6 +212,20 @@ export function IconSummarize({ size = 24 }: IconProps) {
       <path d="M8.00007 10.2032H14.0001" />
       <path d="M8.00007 13.4062H12.0001" />
       <path d="M17 14L17.2579 14.697C17.5961 15.611 17.7652 16.068 18.0986 16.4014C18.432 16.7348 18.889 16.9039 19.803 17.2421L20.5 17.5L19.803 17.7579C18.889 18.0961 18.432 18.2652 18.0986 18.5986C17.7652 18.932 17.5961 19.389 17.2579 20.303L17 21L16.7421 20.303C16.4039 19.389 16.2348 18.932 15.9014 18.5986C15.568 18.2652 15.111 18.0961 14.197 17.7579L13.5 17.5L14.197 17.2421C15.111 16.9039 15.568 16.7348 15.9014 16.4014C16.2348 16.068 16.4039 15.611 16.7421 14.697L17 14Z" />
+    </svg>
+  )
+}
+
+export function IconFolderTree({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path
+        d="M2.5 5.5A1.5 1.5 0 0 1 4 4h3.6c.4 0 .8.16 1.07.45L10 5.8h6A1.5 1.5 0 0 1 17.5 7.3v7.2A1.5 1.5 0 0 1 16 16H4a1.5 1.5 0 0 1-1.5-1.5v-9z"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinejoin="round"
+      />
+      <path d="M2.5 8.5h15" stroke="currentColor" strokeWidth="1.4" />
     </svg>
   )
 }

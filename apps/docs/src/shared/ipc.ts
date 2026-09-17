@@ -42,6 +42,7 @@ import type {
   AiStreamChunk,
   AiStreamRequest,
 } from '@genoffice/ai-provider'
+import type { HeadlessExportTarget } from '@genoffice/electron-utils/headless-export'
 import type { FaceVerticalMetrics } from '@genoffice/font-metrics'
 import type { AiPanelPrefs } from '@genoffice/ui'
 
@@ -151,6 +152,7 @@ export type MenuCommand =
   | 'print'
   | 'export-pdf'
   | 'export-html'
+  | 'export-images'
   | 'word-count'
   | 'ai-proofread'
   | 'shortcuts'
@@ -187,6 +189,61 @@ export interface AiDocContent {
   html: string
 }
 
+export type ZoteroCommand =
+  'addEditCitation' | 'addEditBibliography' | 'refresh' | 'setDocPrefs' | 'removeCodes'
+
+export type ZoteroCommandErrorCode =
+  'connection-refused' | 'unsupported-command' | 'operation-failed'
+
+export interface ZoteroCommandResult {
+  ok: boolean
+  errorCode?: ZoteroCommandErrorCode
+  error?: string
+}
+
+export interface ZoteroRendererRequest {
+  requestId: string
+  command: string
+  args: unknown[]
+}
+
+export interface ZoteroRendererResponse {
+  requestId: string
+  ok: boolean
+  result?: unknown
+  error?: string
+}
+
+/**
+ * MCP bridge: an editor command pushed from the shell main process into a docs
+ * tab so an external agent drives the *visible* editor instead of writing a file
+ * behind it. `insert_content` / `replace_blocks` / `apply_ops` / `read_document`
+ * reuse the built-in agent's tool executors; `save_document` writes the live
+ * document to an explicit path.
+ */
+export type McpEditorCommand =
+  'insert_content' | 'replace_blocks' | 'apply_ops' | 'read_document' | 'save_document'
+
+export interface McpCommandMessage {
+  requestId: string
+  command: McpEditorCommand
+  payload: unknown
+}
+
+export interface McpCommandResult {
+  requestId: string
+  ok: boolean
+  result?: unknown
+  error?: string
+}
+
+export interface McpSaveResult {
+  ok: boolean
+  path?: string
+  error?: string
+  passwordIntentPending?: boolean
+}
+
 export interface DesktopApi {
   /** current UI language (persisted by the shell in app-settings.json) */
   getLanguage(): Promise<'zh' | 'en' | 'ja' | 'ko' | 'fr' | 'de' | 'es' | 'th' | 'id' | 'ru' | 'ar'>
@@ -209,10 +266,16 @@ export interface DesktopApi {
   /** press on the shell chrome (tab strip is a sibling WebContentsView whose
    *  clicks produce no DOM event here) — dismiss open popovers */
   onChromePressed(handler: () => void): () => void
+  /** invoke Zotero's word-processor integration and service its document callbacks */
+  zoteroCommand(command: ZoteroCommand): Promise<ZoteroCommandResult>
+  onZoteroRequest(handler: (request: ZoteroRendererRequest) => void): () => void
+  respondToZotero(response: ZoteroRendererResponse): void
   openDocx(): Promise<OpenDocxResult>
   openDocxPath(path: string): Promise<OpenDocxResult>
   /** decrypt-and-open a password-protected docx (path from a needsPassword result) */
   openDocxDecrypt(path: string, password: string): Promise<DecryptOpenResult>
+  /** w:altChunk HTML rendered through html2docx in a hidden window; null when conversion fails */
+  convertAltChunkHtml(html: string): Promise<Uint8Array | null>
   /** Review > Protect: set (or clear with null) the desired next-save password;
    *  filePath null = document not saved yet, applied on its first successful save */
   setDocPassword(filePath: string | null, password: string | null): Promise<{ ok: boolean }>
@@ -226,6 +289,10 @@ export interface DesktopApi {
   consumeNewBlankDoc(): Promise<boolean>
   /** AI-authored content queued for this tab by create_document; one-shot, null when none */
   consumeAiDocContent(): Promise<AiDocContent | null>
+  /** Headless export mode: the path and format this hidden renderer must export, null in normal use */
+  consumeHeadlessExport(): Promise<HeadlessExportTarget | null>
+  /** Headless export mode: report the export outcome so the main process can quit */
+  headlessExportDone(result: { ok: boolean; error?: string }): void
   /** AI create_document: build a new standalone file and open it in a new tab */
   createDocument(request: CreateDocumentRequest): Promise<CreateDocumentResult>
   /** receive documents opened from Finder/Explorer while the app is running */
@@ -255,6 +322,10 @@ export interface DesktopApi {
    *  back on (r168); the caller pauses the PM DOM observer and removes the
    *  space again by script */
   respellKick(): Promise<void>
+  /** append one line to userData/spell-diag.log (size-capped) — field
+   *  spellcheck failures are intermittent and platform-bound, so the
+   *  toggle/kick lifecycle keeps a trace support can ask users for */
+  spellDiag(line: string): void
   /** sourcePath: the document's current path — Save As uses its desired next-save
    *  password and commits that state to the chosen path only after success */
   saveDocxAs(
@@ -267,6 +338,15 @@ export interface DesktopApi {
     defaultName: string,
     data: ArrayBuffer,
   ): Promise<{ ok: boolean; path?: string; error?: string; passwordIntentPending?: boolean }>
+  /** MCP-driven output: write the current document to an explicit absolute path
+   *  with no dialog; refuses to replace an existing file unless overwrite is true */
+  saveDocxTo(path: string, data: ArrayBuffer, overwrite: boolean): Promise<McpSaveResult>
+  /** MCP bridge: receive an editor command pushed by the shell main process */
+  onMcpCommand(handler: (message: McpCommandMessage) => void): () => void
+  /** MCP bridge: report a command's outcome back to the shell main process */
+  reportMcpResult(result: McpCommandResult): void
+  /** MCP bridge: announce that this tab's editor is ready for commands */
+  signalMcpReady(): void
   getRecentFiles(): Promise<string[]>
   pickImage(): Promise<PickImageResult | null>
   /** vertical metrics of an installed family (exact name match), null when missing */
@@ -303,6 +383,21 @@ export interface DesktopApi {
     base64Parts: string[],
     outPath?: string,
   ): Promise<{ ok: boolean; path?: string; error?: string }>
+  /** Export as images: the folder picker plus a pre-authorized temp PDF path the
+   *  regular PDF export writes to silently (no reveal, no open) */
+  pickExportImagesTarget(): Promise<{ dir: string; pdfPath: string } | null>
+  /** Read back and delete the temp PDF written for an image export */
+  takeExportPdf(pdfPath: string): Promise<{ ok: boolean; base64?: string; error?: string }>
+  /** Write one page PNG into the folder chosen by pickExportImagesTarget */
+  writeExportImage(
+    dir: string,
+    fileName: string,
+    pngBase64: string,
+  ): Promise<{ ok: boolean; path?: string; error?: string }>
+  /** Save a picture the renderer displays (data URL) through a Save dialog */
+  saveImageAs(src: string): Promise<{ ok: boolean; path?: string; error?: string }>
+  /** Native context menu "View Image" on a chrome surface such as the AI panel */
+  onViewImage(handler: (src: string) => void): () => void
   aiChat(request: AiChatRequest): Promise<AiChatResponse>
   /** start a streaming AI call; deltas arrive via onAiStream with the same requestId */
   aiStream(request: AiStreamRequest): Promise<void>
@@ -372,3 +467,6 @@ export interface DesktopApi {
   /** keep the native View menu's checkbox items in sync with renderer state */
   reportViewMenuState(state: { aiSidebar: boolean; darkCanvas: boolean }): void
 }
+
+/** mirrors VIEW_IMAGE_CHANNEL in @genoffice/electron-utils (kept literal so the preload stays free of main-only deps) */
+export const VIEW_IMAGE_CHANNEL = 'genoffice:view-image'
