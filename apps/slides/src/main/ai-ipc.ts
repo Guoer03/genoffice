@@ -41,7 +41,6 @@ import {
   webSearchTool,
   imageSearchTool,
   generateImageTool,
-  analyzeMediaTool,
 } from '@genoffice/ai-search'
 import { addPicture, editPictureSrcRect, replacePictureBytes } from '@genoffice/pptx-engine'
 import { matchesElementRef } from '@genoffice/pptx-engine/identity'
@@ -279,18 +278,6 @@ export function registerSlidesOnlyAiIpc(): void {
     },
   )
 
-  ipcMain.handle(
-    'ai:analyze-media',
-    async (_event, op: { mediaUrls: string[]; requirements: string }) => {
-      return analyzeMediaTool(
-        AI_SETTINGS_PATH(),
-        {
-          mediaUrls: (op.mediaUrls ?? []).map(String),
-          requirements: String(op.requirements ?? ''),
-        },
-      )
-    },
-  )
 
   /** Bytes of a user attachment the renderer resolved (attachment://): keep
    *  pptx-native formats as-is, convert anything else (webp/bmp/…) to PNG. */
