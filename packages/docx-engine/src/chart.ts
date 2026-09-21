@@ -83,14 +83,14 @@ export function parseChartPartXml(
           : false
   const scatterLines = kind === 'scatter' && /line|smooth/i.test(scatterStyle ?? '')
   const holeVal = attrsOf(findChild(plot, 'c:holeSize') ?? {})['val']
+  // The spec default hole is 50%; an unparseable value falls back to it
+  // instead of zeroing (which would silently drop the setting from the model).
+  const holeParsed = holeVal !== undefined ? parseInt(holeVal, 10) : NaN
   const holePct =
-    nameOf(plot) === 'c:doughnutChart'
-      ? holeVal !== undefined
-        ? parseInt(holeVal, 10) || 0
-        : 50
-      : 0
+    nameOf(plot) === 'c:doughnutChart' ? (Number.isFinite(holeParsed) ? holeParsed : 50) : 0
   const legendPos = legendPosOf(chart)
-  const dataLabels = dataLabelsOf(plot)
+  const legendFontPt = textProps(findChild(findChild(chart, 'c:legend') ?? {}, 'c:txPr')).fontPt
+  const dataLabels = dataLabelsOf(plot, theme)
   const frameLine = lineHex(findChild(space, 'c:spPr'), theme, DEFAULT_FRAME_LINE)
   const axes = axesOf(plotArea, theme)
   const dTable = findChild(plotArea, 'c:dTable')
@@ -154,6 +154,7 @@ export function parseChartPartXml(
   if (series.length === 0) return null
 
   const palette = chartPalette(chartStyleVal(space), theme)
+  const titleFontPt = textProps(findChild(chart, 'c:title')).fontPt
   let title = chartTitle(chart)
   // Office names a single-series chart's auto title after the series
   if (title === 'Chart Title' && series.length === 1 && series[0].name) title = series[0].name
@@ -168,10 +169,12 @@ export function parseChartPartXml(
     ...(explosionPct ? { explosionPct } : {}),
     ...(dataLabels ? { dataLabels } : {}),
     ...(legendPos ? { legendPos } : { noLegend: true }),
+    ...(legendFontPt !== undefined ? { legendFontPt } : {}),
     ...(frameLine ? { frameLine } : {}),
     ...axes,
     ...(dataTable ? { dataTable } : {}),
     ...(title !== undefined ? { title } : {}),
+    ...(titleFontPt !== undefined ? { titleFontPt } : {}),
     categories,
     series,
     ...(palette ? { palette } : {}),
@@ -186,16 +189,68 @@ function boolFlag(parent: XNode, tag: string): boolean {
   return val === undefined || val === '1' || val === 'true'
 }
 
-/** c:dLbls show* flags; the first series' own dLbls beats the plot-level block */
-function dataLabelsOf(plot: XNode): ChartDisplay['dataLabels'] {
+/** size (pt) and solid color of the first a:defRPr / a:rPr under a text-properties node */
+function textProps(
+  node: XNode | undefined,
+  theme?: ThemeColors | null,
+): { fontPt?: number; color?: string } {
+  if (!node) return {}
+  let rPr: XNode | undefined
+  const walk = (n: XNode) => {
+    for (const child of childrenOf(n)) {
+      if (rPr) return
+      const name = nameOf(child)
+      if (name === 'a:defRPr' || name === 'a:rPr') rPr = child
+      else walk(child)
+    }
+  }
+  walk(node)
+  if (!rPr) return {}
+  const sz = parseInt(attrsOf(rPr)['sz'] ?? '', 10)
+  const color = solidFillHex(rPr, theme)
+  return { ...(sz > 0 ? { fontPt: sz / 100 } : {}), ...(color ? { color } : {}) }
+}
+
+/**
+ * c:dLbls show* flags; the first series' own dLbls beats the plot-level block.
+ * Per-point c:dLbl blocks override the series flags for their points, so when
+ * every cached point carries one Word shows only what those blocks enable.
+ */
+function dataLabelsOf(plot: XNode, theme?: ThemeColors | null): ChartDisplay['dataLabels'] {
   const ser = findChild(plot, 'c:ser')
   const dLbls = (ser ? findChild(ser, 'c:dLbls') : undefined) ?? findChild(plot, 'c:dLbls')
   if (!dLbls || boolFlag(dLbls, 'c:delete')) return undefined
+  const flagsOf = (n: XNode) => ({
+    val: boolFlag(n, 'c:showVal'),
+    pct: boolFlag(n, 'c:showPercent'),
+    cat: boolFlag(n, 'c:showCatName'),
+  })
+  const val = ser ? (findChild(ser, 'c:val') ?? findChild(ser, 'c:yVal')) : undefined
+  const points = val ? cacheNumbers(val).length : 0
+  const perPoint = findChildren(dLbls, 'c:dLbl').filter((d) => !boolFlag(d, 'c:delete'))
+  let source: XNode = dLbls
+  let flags = flagsOf(dLbls)
+  if (points > 0 && perPoint.length >= points) {
+    source = perPoint[0]
+    flags = perPoint.map(flagsOf).reduce((a, f) => ({
+      val: a.val || f.val,
+      pct: a.pct || f.pct,
+      cat: a.cat || f.cat,
+    }))
+  }
+  if (!flags.val && !flags.pct && !flags.cat) return undefined
   const out: NonNullable<ChartDisplay['dataLabels']> = {}
-  if (boolFlag(dLbls, 'c:showVal')) out.val = true
-  if (boolFlag(dLbls, 'c:showPercent')) out.pct = true
-  if (boolFlag(dLbls, 'c:showCatName')) out.cat = true
-  return out.val || out.pct || out.cat ? out : undefined
+  if (flags.val) out.val = true
+  if (flags.pct) out.pct = true
+  if (flags.cat) out.cat = true
+  const text = textProps(findChild(source, 'c:txPr') ?? findChild(dLbls, 'c:txPr'), theme)
+  if (text.fontPt !== undefined) out.fontPt = text.fontPt
+  if (text.color) out.color = text.color
+  const numFmt = attrsOf(findChild(source, 'c:numFmt') ?? findChild(dLbls, 'c:numFmt') ?? {})[
+    'formatCode'
+  ]
+  if (numFmt) out.numFmt = numFmt
+  return out
 }
 
 /**
@@ -223,9 +278,22 @@ function axesOf(
     const line = lineHex(findChild(ax, 'c:spPr'), theme, autoLine)
     if (line) axis.line = line
     if (boolFlag(ax, 'c:delete')) axis.deleted = true
+    const text = textProps(findChild(ax, 'c:txPr'), theme)
+    if (text.fontPt !== undefined) axis.fontPt = text.fontPt
+    if (text.color) axis.color = text.color
+    const gridlines = findChild(ax, 'c:majorGridlines')
+    if (gridlines) {
+      const grid = lineHex(findChild(gridlines, 'c:spPr'), theme, autoGridHex(theme))
+      if (grid) axis.gridLine = grid
+    }
     out[slot] = axis
   }
   return out
+}
+
+/** Office's automatic major gridline: tx1 at 15% tint */
+function autoGridHex(theme?: ThemeColors | null): string {
+  return tintHex(theme?.dk1 && /^[0-9A-Fa-f]{6}$/.test(theme.dk1) ? theme.dk1 : '000000', 0.15)
 }
 
 /** Office's automatic axis / data-table line: tx1 at 75% tint */
@@ -646,7 +714,18 @@ const _XLSX_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.spread
 export const CHART_WORKBOOK_REL_TYPE =
   'http://schemas.openxmlformats.org/officeDocument/2006/relationships/package'
 
-const colLetter = (i: number) => String.fromCharCode(66 + i) // B, C, D...
+// Series data columns start at B (column A holds the categories):
+// 0 → B … 24 → Z, 25 → AA, 26 → AB, … (plain charCode arithmetic breaks past Z).
+export const colLetter = (i: number): string => {
+  let n = i + 2 // 1-based column number: A = 1, B = 2
+  let label = ''
+  while (n > 0) {
+    const rem = (n - 1) % 26
+    label = String.fromCharCode(65 + rem) + label
+    n = Math.floor((n - 1) / 26)
+  }
+  return label
+}
 
 function strCacheXml(values: string[], f: string): string {
   return (

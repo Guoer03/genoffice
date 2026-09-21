@@ -6,8 +6,13 @@ import JSZip from 'jszip'
 
 import { encodeXlsxEscapes } from './xlsx-escapes'
 import { DEFAULT_THEME_XML } from './xlsx-default-theme'
+import { MINIMAL_STYLESHEET_XML } from './xlsx-default-styles'
 
 const DELIMITERS = [',', ';', '\t'] as const
+
+/** Max CSV rows/cols parsed: prevents row-count bomb within byte cap from OOMing. */
+export const MAX_CSV_ROWS = 200_000
+export const MAX_CSV_COLS = 1_000
 
 // Excel writes CSV in the system's legacy charset, not UTF-8 (GBK on Chinese
 // Windows, Shift_JIS on Japanese), so decoding everything as UTF-8 turns every
@@ -50,12 +55,37 @@ function score(text: string): number {
  * produce — GBK and Shift_JIS both decode the same bytes to plausible-looking
  * but different CJK.
  */
+/**
+ * UTF-16 without a BOM (Excel writes it; editors strip it): NUL bytes then
+ * interleave the text, which strict UTF-8 accepts — so this must run before
+ * the UTF-8 attempt or the NULs survive as garbage. NUL bytes never occur in
+ * UTF-8/legacy CSV text (GBK/Shift_JIS trail bytes exclude 0x00), so any
+ * meaningful NUL presence means UTF-16, with the NUL-heavy side picking the
+ * byte order (ties go LE, Excel's order).
+ */
+function sniffUtf16WithoutBom(bytes: Uint8Array): 'utf-16le' | 'utf-16be' | null {
+  const sample = bytes.subarray(0, Math.min(bytes.length, 1024))
+  let pairs = 0
+  let evenNul = 0
+  let oddNul = 0
+  for (let i = 0; i + 1 < sample.length; i += 2) {
+    pairs += 1
+    if (sample[i] === 0) evenNul += 1
+    if (sample[i + 1] === 0) oddNul += 1
+  }
+  if (pairs < 2) return null
+  if ((evenNul + oddNul) / (pairs * 2) < 0.05) return null
+  return oddNul >= evenNul ? 'utf-16le' : 'utf-16be'
+}
+
 export function decodeCsvBuffer(bytes: Uint8Array, preferred?: string): string {
   if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
     return decode(bytes.subarray(3), 'utf-8') ?? ''
   }
   if (bytes[0] === 0xff && bytes[1] === 0xfe) return decode(bytes.subarray(2), 'utf-16le') ?? ''
   if (bytes[0] === 0xfe && bytes[1] === 0xff) return decode(bytes.subarray(2), 'utf-16be') ?? ''
+  const bomless = sniffUtf16WithoutBom(bytes)
+  if (bomless) return decode(bytes, bomless) ?? ''
 
   const utf8 = decode(bytes, 'utf-8', true)
   if (utf8 !== null) return utf8
@@ -132,6 +162,9 @@ export function parseCsv(input: string, delimiter = sniffDelimiter(input)): stri
   const stripped = splitSepDeclaration(input).text
   const text = stripped.startsWith('﻿') ? stripped.slice(1) : stripped
   const rows: string[][] = []
+  const fail = (msg: string): never => {
+    throw new Error(`CSV import rejected: ${msg}`)
+  }
   let row: string[] = []
   let field = ''
   let quoted = false
@@ -154,11 +187,13 @@ export function parseCsv(input: string, delimiter = sniffDelimiter(input)): stri
       quoted = true
     } else if (character === delimiter) {
       row.push(field)
+      if (row.length > MAX_CSV_COLS) fail(`too many columns (cap ${MAX_CSV_COLS})`)
       field = ''
     } else if (character === '\n' || character === '\r') {
       if (character === '\r' && text[index + 1] === '\n') index += 1
       row.push(field)
       rows.push(row)
+      if (rows.length > MAX_CSV_ROWS) fail(`too many rows (cap ${MAX_CSV_ROWS})`)
       row = []
       field = ''
     } else {
@@ -298,6 +333,7 @@ async function xlsxBufferFromRows(
       '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
       '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
       '<Override PartName="/xl/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>' +
+      '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
       '</Types>',
   )
   zip.file(
@@ -319,9 +355,11 @@ async function xlsxBufferFromRows(
       '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
       '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>' +
       '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="theme/theme1.xml"/>' +
+      '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
       '</Relationships>',
   )
   zip.file('xl/theme/theme1.xml', DEFAULT_THEME_XML)
+  zip.file('xl/styles.xml', MINIMAL_STYLESHEET_XML)
   zip.file('xl/worksheets/sheet1.xml', buildWorksheetXml(rows))
   return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' })
 }

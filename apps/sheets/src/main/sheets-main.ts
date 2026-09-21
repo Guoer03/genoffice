@@ -1495,6 +1495,8 @@ interface SheetsTabSession {
  * tab (or a closed-then-reopened tab) registered and overwrote the previous closure. */
 /// Same ceiling as local add_image (readLocalImage's 20MB check)
 const MAX_REMOTE_IMAGE_BYTES = 20 * 1024 * 1024
+/** Max CSV bytes converted on open: prevents 500MB CSV OOMing main before sidecar limits. */
+const MAX_CSV_IMPORT_BYTES = 32 * 1024 * 1024
 
 const sheetsTabs = new Map<number, SheetsTabSession>()
 let activeSheetsWebContents: WebContents | null = null
@@ -1611,6 +1613,19 @@ export function sheetsFileRenamed(wc: WebContents, oldPath: string, newPath: str
 const untitledWorkbookPaths = new Set<string>()
 export function markSheetsUntitledPath(path: string): void {
   untitledWorkbookPaths.add(path)
+}
+
+const mcpWritablePaths = new Map<number, Set<string>>()
+
+/** MCP save_session: the shell resolved this path for the tab, so a dialog-free save may write it */
+export function authorizeMcpSheetWrite(wcId: number, filePath: string): void {
+  const set = mcpWritablePaths.get(wcId) ?? new Set<string>()
+  set.add(filePath)
+  mcpWritablePaths.set(wcId, set)
+}
+
+function canMcpSheetWrite(wcId: number, filePath: string): boolean {
+  return mcpWritablePaths.get(wcId)?.has(filePath) === true
 }
 
 /** Sanitize an AI-provided sheet name into a safe filename base: strip illegal path chars, collapse whitespace, cap length; null if invalid. (Mirrors slides' draft naming.) */
@@ -2822,9 +2837,23 @@ export function registerSheetsIpc(): void {
     // original .csv afterwards.
     const csvInPlace = request.mode === 'save' && session.csvSourcePath !== undefined
     let targetPath = session.path
-    // Converted .xls imports never save silently over the temp copy — the
-    // first save always asks where the .xlsx should live.
-    if (request.mode === 'save-as' || session.suggestSaveAs !== undefined) {
+    // MCP explicit-path save (planning/mcp-server.md): dialog-free Save As to
+    // an exact path with a clobber guard — docs:save-to parity. Only the xlsx
+    // pipeline is reachable this way (.xlsm/.csv need their interactive flows).
+    if (request.targetPath !== undefined) {
+      if (request.mode !== 'save-as') throw new Error('An explicit save path needs Save As.')
+      if (!isAbsolute(request.targetPath)) throw new Error('Save path must be absolute.')
+      targetPath = /\.xlsx$/i.test(request.targetPath)
+        ? request.targetPath
+        : `${request.targetPath}.xlsx`
+      // only a target the MCP layer resolved for this tab may be written without a dialog
+      if (!canMcpSheetWrite(event.sender.id, targetPath)) {
+        throw new Error('save target was not authorized')
+      }
+      if (existsSync(targetPath) && request.overwrite !== true) {
+        throw new Error(`file already exists: ${targetPath}`)
+      }
+    } else if (request.mode === 'save-as' || session.suggestSaveAs !== undefined) {
       // .xlsm keeps its extension: untouched archive entries (vbaProject.bin,
       // the macro-enabled content type) round-trip verbatim through the save.
       const macroEnabled = /\.xlsm$/i.test(
@@ -3426,6 +3455,18 @@ export function registerProjectIpc(): void {
         scope?: { label: string; text?: string }
       },
     ) => {
+      if (args.role !== 'user' && args.role !== 'assistant') {
+        throw new Error(`Invalid chat role: ${String(args.role)}`)
+      }
+      if (typeof args.text !== 'string' || args.text.length > 200_000) {
+        throw new Error('Invalid chat text: must be a string up to 200000 chars')
+      }
+      if (args.tools && (!Array.isArray(args.tools) || args.tools.length > 50)) {
+        throw new Error('Invalid chat tools: must be an array up to 50 entries')
+      }
+      if (args.attachments && (!Array.isArray(args.attachments) || args.attachments.length > 20)) {
+        throw new Error('Invalid chat attachments: must be an array up to 20 entries')
+      }
       const msg: Parameters<ProjectStore['appendChatMessage']>[2] = {
         role: args.role,
         text: args.text,
@@ -3888,6 +3929,8 @@ async function prepareWorkbookForOpen(
   const openPath = join(directory, `${stem}.xlsx`)
   try {
     if (extension === 'csv') {
+      const csvStat = await stat(path)
+      if (csvStat.size > MAX_CSV_IMPORT_BYTES) throw new Error(tm('errFileTooLarge'))
       await writeFile(
         openPath,
         await csvToXlsxBuffer(decodeCsvBuffer(await readFile(path), legacyCsvCharset())),

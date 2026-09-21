@@ -1,8 +1,9 @@
-import { Extension, Mark } from '@tiptap/core'
+import { Extension, Mark, combineTransactionSteps, getChangedRanges } from '@tiptap/core'
+import type { Mark as PmMark } from '@tiptap/pm/model'
 import { Plugin, PluginKey } from '@tiptap/pm/state'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import {} from '@tiptap/pm/tables'
-import { cssCsFontFamily, cssRunFontFamily } from '../line-metrics'
+import { cssCsFontFamily, cssRunFontFamily, cssFontFamily } from '../line-metrics'
 import { isEastAsianFontName } from '../font-list'
 import { t } from '../i18n/locale'
 import { dkBackground } from './dark-page'
@@ -477,6 +478,7 @@ const CLIPBOARD_TEXT_STYLE_TYPES: Record<string, 'string' | 'number' | 'boolean'
   font: 'string',
   eaSlotEmpty: 'boolean',
   fontAscii: 'string',
+  eastAsiaFont: 'string',
   csFont: 'string',
   charSpacingTwips: 'number',
   charScaleEm: 'number',
@@ -573,6 +575,7 @@ export const TextStyleMark = Mark.create({
       eaSlotEmpty: { default: null as boolean | null },
       // Latin slot (w:ascii/w:hAnsi) when it differs from the primary/eastAsia font
       fontAscii: { default: null as string | null },
+      eastAsiaFont: { default: null as string | null, rendered: false },
       // complex-script slot (w:cs); convert sets it only when the run text needs it
       csFont: { default: null as string | null },
       charSpacingTwips: { default: null as number | null },
@@ -653,6 +656,9 @@ export const TextStyleMark = Mark.create({
       const ea = mark.attrs.font ? String(mark.attrs.font) : null
       const ascii = mark.attrs.fontAscii ? String(mark.attrs.fontAscii) : null
       const cs = mark.attrs.csFont ? String(mark.attrs.csFont) : null
+      const explicitEa = mark.attrs.eastAsiaFont ?? (!mark.attrs.rawRPr ? ea : null)
+      if (explicitEa && !mark.attrs.eaSlotEmpty)
+        styles.push(`--doc-east-asian-font:${cssFontFamily(String(explicitEa))}`)
       styles.push(
         `font-family:${
           cs
@@ -734,6 +740,80 @@ export const TextStyleMark = Mark.create({
       if (ink) attrs['data-ink'] = ink
     }
     return ['span', attrs, 0]
+  },
+})
+
+/** Imported runs carry explicit Word off-switches (w:b/w:i val=0 → docTextStyle
+ * boldOff/italicOff, painted as font-weight/style:normal). They coexist with a
+ * later user toggle: the toggle only adds the bold/italic mark, and since the
+ * docTextStyle span renders INSIDE the strong/em, the off-switch wins the paint
+ * while isActive() and the saved file both say bold — the ribbon lights and the
+ * reopened document is bold, but the live text never changes (task#426).
+ * Word semantics: bolding a b=0 run replaces the off-switch. Enforce that at
+ * the model level — whenever an edit leaves text (or storedMarks) carrying both
+ * the format mark and its off-switch, retire the off-switch (true → false, not
+ * null: the run still knows it was explicitly off). Un-bolding such text puts
+ * the off-switch back (false → true), because the inherited weight — paragraph
+ * style, table first row, docDefaults — would otherwise paint bold while
+ * rawRPr keeps saving the original w:b=0. Save output is unaffected
+ * (runFromMarks never reads the Off attrs). */
+const FORMAT_OFF_PAIRS = [
+  { mark: 'bold', off: 'boldOff' },
+  { mark: 'italic', off: 'italicOff' },
+] as const
+
+export const FormatOffClearExtension = Extension.create({
+  name: 'formatOffClear',
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: new PluginKey('formatOffClear'),
+        appendTransaction: (trs, oldState, state) => {
+          if (!trs.some((tr) => tr.docChanged || tr.storedMarksSet)) return null
+          const styleType = state.schema.marks.docTextStyle
+          if (!styleType) return null
+          let tr: typeof state.tr | null = null
+
+          const clearedAttrs = (marks: readonly PmMark[]): Record<string, unknown> | null => {
+            const style = marks.find((m) => m.type === styleType)
+            if (!style) return null
+            let attrs = style.attrs
+            for (const { mark, off } of FORMAT_OFF_PAIRS) {
+              const on = marks.some((m) => m.type.name === mark)
+              if (attrs[off] === true && on) attrs = { ...attrs, [off]: false }
+              else if (attrs[off] === false && !on) attrs = { ...attrs, [off]: true }
+            }
+            return attrs === style.attrs ? null : attrs
+          }
+
+          const docTrs = trs.filter((t) => t.docChanged)
+          if (docTrs.length) {
+            const transform = combineTransactionSteps(oldState.doc, [...docTrs])
+            for (const { newRange } of getChangedRanges(transform)) {
+              state.doc.nodesBetween(newRange.from, newRange.to, (node, pos) => {
+                if (!node.isText) return
+                const attrs = clearedAttrs(node.marks)
+                if (!attrs) return
+                tr ??= state.tr
+                tr.addMark(pos, pos + node.nodeSize, styleType.create(attrs))
+              })
+            }
+          }
+
+          const stored = state.storedMarks
+          if (stored) {
+            const attrs = clearedAttrs(stored)
+            if (attrs) {
+              tr ??= state.tr
+              tr.setStoredMarks(
+                stored.map((m) => (m.type === styleType ? styleType.create(attrs) : m)),
+              )
+            }
+          }
+          return tr
+        },
+      }),
+    ]
   },
 })
 

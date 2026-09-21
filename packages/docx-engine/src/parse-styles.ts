@@ -326,6 +326,7 @@ export async function parseStyles(
     'strike',
     'font',
     'fontAscii',
+    'eastAsiaFont',
     'csFont',
     'caps',
     'bdr',
@@ -336,6 +337,10 @@ export async function parseStyles(
     const a = styles.get(fromId)
     const b = styles.get(toId)
     if (!a || !b) continue
+    // Word pairs linked styles both ways; a stray one-way w:link (a caption style
+    // pointing at another paragraph style's character twin) contributes nothing
+    const back = linkedIds.get(toId)
+    if (back !== undefined && back !== fromId) continue
     for (const [self, other] of [
       [a, b],
       [b, a],
@@ -529,6 +534,7 @@ function styleDisplayOf(
     const font = rf.eastAsia ?? rf.ascii ?? rf.hAnsi
     const fontAscii = rf.ascii ?? rf.hAnsi
     if (fontAscii) display.fontAscii = fontAscii
+    if (rf.eastAsia && !rf.eaSlotEmpty) display.eastAsiaFont = rf.eastAsia
     if (rf.cs) display.csFont = rf.cs
     if (font) display.font = font
     if (rf.eaSlotEmpty && font && font === rf.eastAsia) display.eaSlotEmpty = true
@@ -607,7 +613,7 @@ function styleDisplayOf(
     if (overflowPunct !== undefined) display.overflowPunct = overflowPunct
     const jc = attrsOf(findChild(pPr, 'w:jc') ?? {})['w:val']
     if (jc === 'center' || jc === 'right' || jc === 'left' || jc === 'justify') display.align = jc
-    else if (jc === 'both') display.align = 'justify'
+    else if (jc === 'both' || /kashida$|^thaiDistribute$/i.test(jc ?? '')) display.align = 'justify'
     else if (jc === 'distribute') display.align = 'distribute'
     const bidi = onOffOf(pPr, 'w:bidi')
     if (bidi !== undefined) display.bidi = bidi

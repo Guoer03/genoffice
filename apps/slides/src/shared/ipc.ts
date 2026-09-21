@@ -455,6 +455,8 @@ export type EditBackgroundOp = {
 export interface CopyElementsOp {
   slideIndex: number
   sourceIds: string[]
+  /** Renderer-generated token tying a delayed PNG export to this copy. */
+  clipboardToken?: string
   /** The copy backs a cut: the originals are being removed, so pasting back onto the source page lands in place. */
   cut?: boolean
 }
@@ -1148,6 +1150,7 @@ export interface SlidesApi {
   onAutoSaveDefaultChanged: (handler: (value: AutoSaveDefault) => void) => () => void
   /** AI panel text size + chat-input spellcheck (Settings → General in the shell) */
   getAiPanelPrefs: () => Promise<AiPanelPrefs>
+  setAiPanelPrefs(patch: Partial<AiPanelPrefs>): Promise<AiPanelPrefs>
   onAiPanelPrefsChanged: (handler: (prefs: AiPanelPrefs) => void) => () => void
   /** press on the shell chrome (tab strip is a sibling WebContentsView whose
    *  clicks produce no DOM event here) — dismiss open popovers */
@@ -1358,6 +1361,8 @@ export interface SlidesApi {
   >
   /** Copy elements to the in-app clipboard; returns the number actually copied */
   copyElements: (op: CopyElementsOp) => Promise<number>
+  /** Add the renderer's PNG to the matching current element copy for external applications. */
+  copyElementsImage: (clipboardToken: string, pngBase64: string) => Promise<boolean>
   /** Paste; empty clipboard or failure returns null. Note the whole page's element ids update, requiring a whole-page replace */
   pasteElements: (
     op: PasteElementsOp,

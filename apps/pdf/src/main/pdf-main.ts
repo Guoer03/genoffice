@@ -4,13 +4,14 @@ import {
   existsSync,
   linkSync,
   readFileSync,
+  realpathSync,
   statSync,
   unlinkSync,
   writeFileSync,
 } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
 import { userInfo } from 'node:os'
-import { basename, dirname, join } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
 import { BrowserWindow, WebContentsView, app, dialog, ipcMain, shell } from 'electron'
 import type { WebContents } from 'electron'
 import {
@@ -85,6 +86,7 @@ import {
   saveSignatures,
 } from './signature-store'
 import { uniqueGeneratedPdfPath } from './generated-output'
+import { validateRedactionRegions } from './redaction'
 
 const tDlg = createI18n({
   zh: {
@@ -428,6 +430,28 @@ const tDlg = createI18n({
     btnCancel: '取消',
   },
 })
+
+/** A redaction copy must never be the same file through a symlink, `.`/`..`,
+ * or an existing hard link. For a new destination, canonicalize its parent
+ * directory so a symlinked directory cannot disguise the source path. */
+function isSameRedactionCopyPath(source: string, target: string): boolean {
+  const canonical = (path: string) => {
+    const absolute = resolve(path)
+    try {
+      return realpathSync.native(absolute)
+    } catch {
+      return join(realpathSync.native(dirname(absolute)), basename(absolute))
+    }
+  }
+  if (canonical(source) === canonical(target)) return true
+  try {
+    const a = statSync(source)
+    const b = statSync(target)
+    return a.dev === b.dev && a.ino === b.ino
+  } catch {
+    return false
+  }
+}
 type DlgKey =
   | 'dlgExportImages'
   | 'dlgExtract'
@@ -880,6 +904,38 @@ function registerPdfIpc(): void {
     if (target !== path && saveAsTargetByWc.get(e.sender.id) !== target) {
       return { ok: false, error: 'pdf: target path not granted to this view' }
     }
+    if (request.redactions !== undefined) {
+      let regions
+      try {
+        regions = validateRedactionRegions(request.redactions)
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) }
+      }
+      if (isSameRedactionCopyPath(path, target)) {
+        return { ok: false, error: 'pdf: permanent redaction requires Save As copy' }
+      }
+      // A redaction is intentionally its own irreversible transaction. Persist normal
+      // changes first; otherwise a later annotation/form write could add recoverable
+      // data after native removal.
+      if (
+        request.markups.length ||
+        request.annotDeletes?.length ||
+        request.drawings.length ||
+        request.noteEdits?.length ||
+        request.formValues.length ||
+        request.stamps.length ||
+        request.textEdits?.length ||
+        request.textInserts?.length ||
+        request.imageEdits?.length ||
+        request.rotations?.length ||
+        request.deletedPages?.length ||
+        request.pageOrder?.length ||
+        request.metadata
+      ) {
+        return { ok: false, error: 'pdf: save other pending edits before applying redactions' }
+      }
+      request = { ...request, redactions: regions }
+    }
     try {
       const { skippedTextEdits, skippedTextInserts, skippedImageEdits } = await savePdfToPath(
         path,
@@ -894,6 +950,28 @@ function registerPdfIpc(): void {
       }
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
+  ipcMain.handle(PDF_CHANNELS.requestRedactionCopy, async (e, path: unknown): Promise<boolean> => {
+    if (typeof path !== 'string' || !allowedByWc.get(e.sender.id)?.has(path)) return false
+    const base = basename(path).replace(/\.pdf$/i, '')
+    setPdfSaveAsInFlight(e.sender, true)
+    try {
+      const parent = BrowserWindow.fromWebContents(e.sender)
+      const options = {
+        title: 'Save redacted PDF copy',
+        defaultPath: `${base}-redacted.pdf`,
+        filters: [{ name: 'PDF', extensions: ['pdf'] }],
+      }
+      const picked = parent
+        ? await dialog.showSaveDialog(parent, options)
+        : await dialog.showSaveDialog(options)
+      if (picked.canceled || !picked.filePath || isSameRedactionCopyPath(path, picked.filePath))
+        return false
+      return await requestPdfSaveAs(e.sender, picked.filePath)
+    } finally {
+      setPdfSaveAsInFlight(e.sender, false)
     }
   })
 

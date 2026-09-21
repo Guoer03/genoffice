@@ -242,6 +242,7 @@ export interface McpSaveResult {
   path?: string
   error?: string
   passwordIntentPending?: boolean
+  data?: ArrayBuffer
 }
 
 export interface DesktopApi {
@@ -262,6 +263,7 @@ export interface DesktopApi {
   onAutoSaveDefaultChanged(handler: (value: AutoSaveDefault) => void): () => void
   /** AI panel text size + chat-input spellcheck (Settings → General in the shell) */
   getAiPanelPrefs(): Promise<AiPanelPrefs>
+  setAiPanelPrefs(patch: Partial<AiPanelPrefs>): Promise<AiPanelPrefs>
   onAiPanelPrefsChanged(handler: (prefs: AiPanelPrefs) => void): () => void
   /** press on the shell chrome (tab strip is a sibling WebContentsView whose
    *  clicks produce no DOM event here) — dismiss open popovers */
@@ -312,6 +314,9 @@ export interface DesktopApi {
     reason?: 'external-modified'
     /** a newer password choice arrived after this save's snapshot */
     passwordIntentPending?: boolean
+    /** the saved document in full when an encrypted save absorbed lazily served
+     *  pictures: the renderer reparses from it and leaves lazy mode */
+    data?: ArrayBuffer
   }>
   /** crash-recovery copy of a dirty document, stored under userData */
   writeRecoveryCopy(path: string, data: ArrayBuffer): Promise<{ ok: boolean }>
@@ -332,12 +337,24 @@ export interface DesktopApi {
     defaultName: string,
     data: ArrayBuffer,
     sourcePath?: string | null,
-  ): Promise<{ ok: boolean; path?: string; error?: string; passwordIntentPending?: boolean }>
+  ): Promise<{
+    ok: boolean
+    path?: string
+    error?: string
+    passwordIntentPending?: boolean
+    data?: ArrayBuffer
+  }>
   /** first save of a new document: silently writes into the default folder, no dialog */
   saveDocxNew(
     defaultName: string,
     data: ArrayBuffer,
-  ): Promise<{ ok: boolean; path?: string; error?: string; passwordIntentPending?: boolean }>
+  ): Promise<{
+    ok: boolean
+    path?: string
+    error?: string
+    passwordIntentPending?: boolean
+    data?: ArrayBuffer
+  }>
   /** MCP-driven output: write the current document to an explicit absolute path
    *  with no dialog; refuses to replace an existing file unless overwrite is true */
   saveDocxTo(path: string, data: ArrayBuffer, overwrite: boolean): Promise<McpSaveResult>
@@ -428,6 +445,11 @@ export interface DesktopApi {
     /** failure reason when method === 'error' */
     error?: string
   }>
+  /** media understanding (image/audio/video) via the configured media provider; returns analysis text */
+  analyzeMedia(op: {
+    mediaUrls: string[]
+    requirements: string
+  }): Promise<{ text?: string; error?: string }>
   fetchImage(url: string): Promise<{ base64: string; mime: string } | null>
   /** AI image generation via the Genspark cloud channel (requires login + cloud tools) */
   aiGenerateImage(op: {

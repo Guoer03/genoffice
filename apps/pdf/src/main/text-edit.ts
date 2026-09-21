@@ -44,6 +44,9 @@ export interface Pdfium {
   _FPDFText_LoadPage(page: number): number
   _FPDFText_ClosePage(textPage: number): void
   _FPDFText_CountChars(textPage: number): number
+  /** embedpdf's build drops buffer_size: it copies exactly `count` chars into `buffer` */
+  _FPDFText_GetText(textPage: number, startIndex: number, count: number, buffer: number): number
+  _FPDF_GetMetaText(doc: number, tag: number, buffer: number, bufferLen: number): number
   _FPDFText_GetTextObject(textPage: number, index: number): number
   _FPDFText_GetLooseCharBox(textPage: number, index: number, rect: number): number
   _FPDFText_GetCharOrigin(textPage: number, index: number, x: number, y: number): number
@@ -56,8 +59,11 @@ export interface Pdfium {
   _FPDFPage_InsertObjectAtIndex?(page: number, obj: number, index: number): number
   _FPDFPage_GenerateContent(page: number): number
   _FPDFPageObj_GetType(obj: number): number
+  _FPDFFormObj_CountObjects(form: number): number
+  _FPDFFormObj_GetObject(form: number, index: number): number
   _FPDFPageObj_Destroy(obj: number): void
   _FPDFPageObj_GetBounds(obj: number, l: number, b: number, r: number, t: number): number
+  _FPDFImageObj_GetImageDataRaw(obj: number, buffer: number, buflen: number): number
   _FPDFPageObj_GetMatrix(obj: number, matrix: number): number
   _FPDFPageObj_SetMatrix(obj: number, matrix: number): number
   _FPDFPageObj_GetFillColor(obj: number, r: number, g: number, b: number, a: number): number
@@ -67,6 +73,8 @@ export interface Pdfium {
   _FPDFPageObj_GetStrokeWidth(obj: number, width: number): number
   _FPDFPageObj_SetStrokeWidth(obj: number, width: number): number
   _FPDFPageObj_SetLineJoin(obj: number, join: number): number
+  _FPDFPageObj_CreateNewRect(x: number, y: number, width: number, height: number): number
+  _FPDFPath_SetDrawMode(path: number, fillMode: number, stroke: number): number
   _FPDFTextObj_GetTextRenderMode(obj: number): number
   _FPDFTextObj_SetTextRenderMode(obj: number, mode: number): number
   _FPDFPageObj_CreateTextObj(doc: number, font: number, size: number): number
@@ -121,11 +129,24 @@ export interface Pdfium {
   _FPDFPage_GetAnnot(page: number, index: number): number
   _FPDFPage_CloseAnnot(annot: number): void
   _FPDFPage_RemoveAnnot(page: number, index: number): number
+  _FPDFPage_CreateAnnot(page: number, subtype: number): number
+  _FPDFAnnot_SetRect(annot: number, rect: number): number
+  _FPDFAnnot_SetColor(
+    annot: number,
+    type: number,
+    r: number,
+    g: number,
+    b: number,
+    a: number,
+  ): number
+  _EPDFAnnot_SetColor(annot: number, type: number, r: number, g: number, b: number): number
   _FPDFAnnot_GetSubtype(annot: number): number
   _FPDFAnnot_GetRect(annot: number, rect: number): number
   _FPDFAnnot_GetStringValue(annot: number, key: number, buffer: number, buflen: number): number
   _EPDFPage_GetAnnotByObjectNumber(page: number, objNum: number): number
   _EPDFPage_RemoveAnnotByObjectNumber(page: number, objNum: number): number
+  /** EmbedPDF 2.15.1 native redaction extension. */
+  _EPDFAnnot_ApplyRedaction(page: number, annot: number): number
 }
 
 let pdfiumPromise: Promise<Pdfium> | null = null

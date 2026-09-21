@@ -206,7 +206,17 @@ class Children {
   }
 }
 
-const num = (n: number) => String(Math.round(n))
+const num = (n: number) => {
+  if (!Number.isFinite(n)) throw new Error(`Invalid numeric value: ${String(n)}`)
+  return String(Math.round(n))
+}
+
+/** Valid style font size in half-points (Word range 1..3168). */
+function assertFontSizeHalfPoints(v: number): void {
+  if (!Number.isFinite(v) || v < 1 || v > 3168) {
+    throw new Error(`Invalid font size: ${String(v)} half-points (expected 1..3168)`)
+  }
+}
 
 function patchRun(children: Children, rp: StyleRunProps): void {
   children.flag('w:b', rp.bold)
@@ -231,6 +241,7 @@ function patchRun(children: Children, rp: StyleRunProps): void {
     )
   }
   if (rp.sizeHalfPoints !== undefined) {
+    if (rp.sizeHalfPoints !== null) assertFontSizeHalfPoints(rp.sizeHalfPoints)
     const sz = rp.sizeHalfPoints === null ? null : num(rp.sizeHalfPoints)
     children.set('w:sz', sz === null ? null : `<w:sz w:val="${sz}"/>`)
     children.set('w:szCs', sz === null ? null : `<w:szCs w:val="${sz}"/>`)
@@ -241,10 +252,8 @@ function patchRun(children: Children, rp: StyleRunProps): void {
     Object.assign(fonts, {
       'w:ascii': f,
       'w:hAnsi': f,
-      'w:cs': f,
       'w:asciiTheme': null,
       'w:hAnsiTheme': null,
-      'w:cstheme': null,
     })
   }
   if (rp.eastAsiaFont !== undefined) {
@@ -337,4 +346,33 @@ export function mergeStyleXml(existing: string | null, up: StyleUpsert): string 
     children.set('w:rPr', inner.size ? `<w:rPr>${inner.toXml()}</w:rPr>` : null)
   }
   return tag('w:style', attrs, children.toXml())
+}
+
+/** Patch only the requested default font slots, preserving all other defaults. */
+export type DefaultFonts = Pick<StyleRunProps, 'font' | 'eastAsiaFont'>
+export function mergeDefaultFontsXml(xml: string, fonts: DefaultFonts): string {
+  const declaration = xml.slice(0, xml.indexOf('<w:styles'))
+  const root = xml.slice(xml.indexOf('<w:styles'))
+  const styles = new Children(splitXmlChildren(innerOf(root)), [
+    'w:docDefaults',
+    'w:latentStyles',
+    'w:style',
+  ])
+  const defaults = new Children(
+    splitXmlChildren(innerOf(styles.get('w:docDefaults')?.xml ?? '<w:docDefaults/>')),
+    ['w:rPrDefault', 'w:pPrDefault'],
+  )
+  const runDefault = new Children(
+    splitXmlChildren(innerOf(defaults.get('w:rPrDefault')?.xml ?? '<w:rPrDefault/>')),
+    ['w:rPr'],
+  )
+  const run = new Children(
+    splitXmlChildren(innerOf(runDefault.get('w:rPr')?.xml ?? '<w:rPr/>')),
+    RPR_CHILD_ORDER,
+  )
+  patchRun(run, fonts)
+  runDefault.set('w:rPr', `<w:rPr>${run.toXml()}</w:rPr>`)
+  defaults.set('w:rPrDefault', `<w:rPrDefault>${runDefault.toXml()}</w:rPrDefault>`)
+  styles.set('w:docDefaults', `<w:docDefaults>${defaults.toXml()}</w:docDefaults>`)
+  return declaration + tag('w:styles', parseTag(root).attrs, styles.toXml())
 }

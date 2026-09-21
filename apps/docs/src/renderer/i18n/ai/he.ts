@@ -116,6 +116,8 @@ export const he = {
   aiSumWebSearchDone: 'חיפוש "{query}" ({count} תוצאות)',
   aiSumImageSearch: 'חיפוש תמונות',
   aiSumImageSearchDone: 'חיפוש תמונות "{query}" ({count} תמונות)',
+  aiSumAnalyzeMedia: 'ניתוח מדיה',
+  aiSumAnalyzeMediaDone: 'המדיה נותחה',
   aiSumInsertImage: 'הוספת תמונה',
   aiSumInsertWebImage: 'הוספה של תמונה מהאינטרנט',
   aiSumGenerateImage: 'יצירת תמונה',

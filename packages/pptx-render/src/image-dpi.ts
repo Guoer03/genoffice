@@ -9,14 +9,55 @@ const HEAD_B64_CHARS = 96 * 1024
 
 const cache = new Map<string, { x: number; y: number } | undefined>()
 
+/** Max cached entries; oldest inserted key is evicted once the cap is reached. */
+export const IMAGE_DPI_CACHE_MAX = 256
+
+/**
+ * Compact cache key for a data URL: input length plus FNV-1a hash.
+ * The full data URL string (often megabytes) is never used as a Map key.
+ */
+export function cacheKeyFor(dataUrl: string): string {
+  let hash = 0x811c9dc5
+  for (let i = 0; i < dataUrl.length; i++) {
+    hash ^= dataUrl.charCodeAt(i)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return `${dataUrl.length}:${(hash >>> 0).toString(16).padStart(8, '0')}`
+}
+
+/** Current number of cached entries (test helper). */
+export function imageDpiCacheSize(): number {
+  return cache.size
+}
+
+/** Current cache keys in insertion order (test helper). */
+export function imageDpiCacheKeys(): string[] {
+  return [...cache.keys()]
+}
+
+/** Empty the cache (test helper). */
+export function clearImageDpiCache(): void {
+  cache.clear()
+}
+
 export function imageDpiFromDataUrl(
   dataUrl: string | undefined,
 ): { x: number; y: number } | undefined {
   if (!dataUrl) return undefined
-  if (cache.has(dataUrl)) return cache.get(dataUrl)
+  const key = cacheKeyFor(dataUrl)
+  if (cache.has(key)) {
+    // Refresh recency so eviction drops the least recently used entry.
+    const cached = cache.get(key)
+    cache.delete(key)
+    cache.set(key, cached)
+    return cached
+  }
   const dpi = readDpi(decodeHead(dataUrl))
-  if (cache.size > 256) cache.clear()
-  cache.set(dataUrl, dpi)
+  if (cache.size >= IMAGE_DPI_CACHE_MAX) {
+    const oldest = cache.keys().next()
+    if (!oldest.done) cache.delete(oldest.value)
+  }
+  cache.set(key, dpi)
   return dpi
 }
 

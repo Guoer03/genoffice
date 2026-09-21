@@ -60,6 +60,8 @@ import {
   showSaveDialogWithMemory,
   windowMenuTemplate,
   aboutMenuItem,
+  checkUpdatesMenuItem,
+  setUpdateCheckInvoker,
   installRendererProtocol,
 } from '@genoffice/electron-utils'
 import { readAppSettings, writeAppSetting, writeAppSettings } from './app-settings'
@@ -140,6 +142,8 @@ import { createCliRunner } from './mcp/cli-runner'
 import { DEFAULT_MCP_PORT } from './mcp/mcp-server'
 import { createDocsControl, installDocsBridge } from './mcp/docs-bridge'
 import { createSlidesControl } from './mcp/slides-bridge'
+import { createSheetsControl, installSheetsBridge } from './mcp/sheets-bridge'
+import { createOpenDocumentsControl, createOpenTargetResolver } from './mcp/open-documents-bridge'
 import {
   configureSheetsRuntime,
   exportSheetsPdfHeadless,
@@ -149,6 +153,7 @@ import {
   requestSheetsClose,
   resolveSheetsSessionPath,
   markSheetsUntitledPath,
+  authorizeMcpSheetWrite,
   sendSheetsMenuAction,
   sheetsFileRenamed,
   setSheetsCloseTabHook,
@@ -160,6 +165,7 @@ import {
 } from '../../../sheets/src/main/sheets-main'
 import {
   configureSlidesRuntime,
+  discardSlidesRecovery,
   exportSlidesPdfHeadless,
   installSlidesMenu,
   replaceSlidesRecentFile,
@@ -191,7 +197,10 @@ import { closePdfPasswordDialog, promptPdfPassword } from './pdf-password-dialog
 import {
   configureMarkdownRuntime,
   exportMarkdownPdfHeadless,
+  markdownDiscardPendingAssets,
   markdownFileRenamed,
+  markdownReadText,
+  markdownSaveToPath,
   requestMarkdownClose,
   requestMarkdownSave,
   sendMarkdownExportRequest,
@@ -202,7 +211,10 @@ import {
 import {
   configureHtmlRuntime,
   exportHtmlHeadless,
+  htmlDiscardPendingAssets,
   htmlFileRenamed,
+  htmlReadText,
+  htmlSaveToPath,
   registerPrivilegedSchemes,
   requestHtmlClose,
   requestHtmlSave,
@@ -258,7 +270,7 @@ import {
 } from './folder-tree'
 import { runHeadlessExport, type HeadlessExporters } from './headless-export'
 import { TabManager } from './tab-manager'
-import { applyUpdateChannel, initAutoUpdater } from './updater'
+import { applyUpdateChannel, checkForUpdatesNow, initAutoUpdater } from './updater'
 import { isUpdateChannel, type UpdateChannel } from '../shared/update-api'
 
 /**
@@ -456,6 +468,7 @@ function currentAiPanelPrefs(): AiPanelPrefs {
   if (cachedAiPanelPrefs) return cachedAiPanelPrefs
   const saved = readAppSettings(APP_SETTINGS_PATH())
   cachedAiPanelPrefs = normalizeAiPanelPrefs({
+    side: saved.aiPanelSide,
     fontSize: saved.aiPanelFontSize,
     customFontSize: saved.aiPanelCustomFontSize,
     spellcheck: saved.aiPanelSpellcheck,
@@ -603,6 +616,7 @@ const tMain = createI18n({
     menuNewHtml: 'AI HTML',
     menuNewPdf: 'AI PDF',
     menuExportPdf: '导出为 PDF…',
+    menuExportImages: '导出为图片…',
     menuExportHtml: '导出为单文件 HTML…',
     menuOpenInDocs: '转换为 Docs 文档并打开',
     menuPrint: '打印…',
@@ -684,6 +698,7 @@ const tMain = createI18n({
     menuNewHtml: 'AI HTML',
     menuNewPdf: 'AI PDF',
     menuExportPdf: 'Export as PDF…',
+    menuExportImages: 'Export as Images…',
     menuExportHtml: 'Export as Single-File HTML…',
     menuOpenInDocs: 'Convert and Open in Docs',
     menuPrint: 'Print…',
@@ -773,6 +788,7 @@ const tMain = createI18n({
     menuNewHtml: 'AI HTML',
     menuNewPdf: 'AI PDF',
     menuExportPdf: 'PDF として書き出す…',
+    menuExportImages: '画像としてエクスポート…',
     menuExportHtml: '単一ファイル HTML として書き出す…',
     menuOpenInDocs: 'Docs 文書に変換して開く',
     menuPrint: '印刷…',
@@ -862,6 +878,7 @@ const tMain = createI18n({
     menuNewHtml: 'AI HTML',
     menuNewPdf: 'AI PDF',
     menuExportPdf: 'PDF로 내보내기…',
+    menuExportImages: '이미지로 내보내기…',
     menuExportHtml: '단일 파일 HTML로 내보내기…',
     menuOpenInDocs: 'Docs 문서로 변환하여 열기',
     menuPrint: '인쇄…',
@@ -950,6 +967,7 @@ const tMain = createI18n({
     menuNewHtml: 'AI HTML',
     menuNewPdf: 'AI PDF',
     menuExportPdf: 'Exporter en PDF…',
+    menuExportImages: 'Exporter en images…',
     menuExportHtml: 'Exporter en HTML (fichier unique)…',
     menuOpenInDocs: 'Convertir et ouvrir dans Docs',
     menuPrint: 'Imprimer…',
@@ -1040,6 +1058,7 @@ const tMain = createI18n({
     menuNewHtml: 'AI HTML',
     menuNewPdf: 'AI PDF',
     menuExportPdf: 'Als PDF exportieren…',
+    menuExportImages: 'Als Bilder exportieren…',
     menuExportHtml: 'Als Einzeldatei-HTML exportieren…',
     menuOpenInDocs: 'In Docs umwandeln und öffnen',
     menuPrint: 'Drucken…',
@@ -1130,6 +1149,7 @@ const tMain = createI18n({
     menuNewHtml: 'AI HTML',
     menuNewPdf: 'AI PDF',
     menuExportPdf: 'Exportar como PDF…',
+    menuExportImages: 'Exportar como imágenes…',
     menuExportHtml: 'Exportar como HTML de archivo único…',
     menuOpenInDocs: 'Convertir y abrir en Docs',
     menuPrint: 'Imprimir…',
@@ -1220,6 +1240,7 @@ const tMain = createI18n({
     menuNewHtml: 'AI HTML',
     menuNewPdf: 'AI PDF',
     menuExportPdf: 'ส่งออกเป็น PDF…',
+    menuExportImages: 'ส่งออกเป็นรูปภาพ…',
     menuExportHtml: 'ส่งออกเป็น HTML ไฟล์เดียว…',
     menuOpenInDocs: 'แปลงและเปิดใน Docs',
     menuPrint: 'พิมพ์…',
@@ -1306,6 +1327,7 @@ const tMain = createI18n({
     menuNewHtml: 'AI HTML',
     menuNewPdf: 'AI PDF',
     menuExportPdf: 'Ekspor sebagai PDF…',
+    menuExportImages: 'Ekspor sebagai gambar…',
     menuExportHtml: 'Ekspor sebagai HTML satu file…',
     menuOpenInDocs: 'Konversi dan buka di Docs',
     menuPrint: 'Cetak…',
@@ -1396,6 +1418,7 @@ const tMain = createI18n({
     menuNewHtml: 'AI HTML',
     menuNewPdf: 'AI PDF',
     menuExportPdf: 'Экспортировать в PDF…',
+    menuExportImages: 'Экспорт в изображения…',
     menuExportHtml: 'Экспортировать в один файл HTML…',
     menuOpenInDocs: 'Преобразовать и открыть в Docs',
     menuPrint: 'Печать…',
@@ -1486,6 +1509,7 @@ const tMain = createI18n({
     menuNewHtml: 'AI HTML',
     menuNewPdf: 'AI PDF',
     menuExportPdf: 'تصدير بتنسيق PDF…',
+    menuExportImages: 'تصدير كصور…',
     menuExportHtml: 'تصدير كملف HTML واحد…',
     menuOpenInDocs: 'التحويل والفتح في Docs',
     menuPrint: 'طباعة…',
@@ -1572,6 +1596,7 @@ const tMain = createI18n({
     menuNewHtml: 'AI HTML',
     menuNewPdf: 'AI PDF',
     menuExportPdf: 'Exportar como PDF…',
+    menuExportImages: 'Exportar como imagens…',
     menuExportHtml: 'Exportar como HTML de arquivo único…',
     menuOpenInDocs: 'Converter e abrir no Docs',
     menuPrint: 'Imprimir…',
@@ -1662,6 +1687,7 @@ const tMain = createI18n({
     menuNewHtml: 'AI HTML',
     menuNewPdf: 'AI PDF',
     menuExportPdf: 'Esporta come PDF…',
+    menuExportImages: 'Esporta come immagini…',
     menuExportHtml: 'Esporta come HTML a file singolo…',
     menuOpenInDocs: 'Converti e apri in Docs',
     menuPrint: 'Stampa…',
@@ -1752,6 +1778,7 @@ const tMain = createI18n({
     menuNewHtml: 'AI HTML',
     menuNewPdf: 'AI PDF',
     menuExportPdf: 'Eksportuj jako PDF…',
+    menuExportImages: 'Eksportuj jako obrazy…',
     menuExportHtml: 'Eksportuj jako pojedynczy plik HTML…',
     menuOpenInDocs: 'Konwertuj i otwórz w Docs',
     menuPrint: 'Drukuj…',
@@ -1842,6 +1869,7 @@ const tMain = createI18n({
     menuNewHtml: 'AI HTML',
     menuNewPdf: 'AI PDF',
     menuExportPdf: 'Exportovat jako PDF…',
+    menuExportImages: 'Exportovat jako obrázky…',
     menuExportHtml: 'Exportovat jako samostatné HTML…',
     menuOpenInDocs: 'Převést a otevřít v Docs',
     menuPrint: 'Tisk…',
@@ -1930,6 +1958,7 @@ const tMain = createI18n({
     menuNewHtml: 'AI HTML',
     menuNewPdf: 'AI PDF',
     menuExportPdf: 'Exporteren als PDF…',
+    menuExportImages: 'Exporteren als afbeeldingen…',
     menuExportHtml: 'Exporteren als één HTML-bestand…',
     menuOpenInDocs: 'Converteren en openen in Docs',
     menuPrint: 'Afdrukken…',
@@ -2020,6 +2049,7 @@ const tMain = createI18n({
     menuNewHtml: 'AI HTML',
     menuNewPdf: 'AI PDF',
     menuExportPdf: 'Eksport sebagai PDF…',
+    menuExportImages: 'Eksport sebagai imej…',
     menuExportHtml: 'Eksport sebagai HTML fail tunggal…',
     menuOpenInDocs: 'Tukar dan buka dalam Docs',
     menuPrint: 'Cetak…',
@@ -2109,6 +2139,7 @@ const tMain = createI18n({
     menuNewHtml: 'AI HTML',
     menuNewPdf: 'AI PDF',
     menuExportPdf: 'ייצוא כ-PDF…',
+    menuExportImages: 'ייצוא כתמונות…',
     menuExportHtml: 'ייצוא כ-HTML בקובץ יחיד…',
     menuOpenInDocs: 'המרה ופתיחה ב-Docs',
     menuPrint: 'הדפסה…',
@@ -2196,6 +2227,7 @@ const tMain = createI18n({
     menuNewHtml: 'AI HTML',
     menuNewPdf: 'AI PDF',
     menuExportPdf: 'PDF के रूप में निर्यात…',
+    menuExportImages: 'छवियों के रूप में निर्यात…',
     menuExportHtml: 'एकल-फ़ाइल HTML के रूप में निर्यात…',
     menuOpenInDocs: 'Docs में बदलें और खोलें',
     menuPrint: 'प्रिंट करें…',
@@ -2286,6 +2318,7 @@ const tMain = createI18n({
     menuNewHtml: 'AI HTML',
     menuNewPdf: 'AI PDF',
     menuExportPdf: '匯出為 PDF…',
+    menuExportImages: '匯出為圖片…',
     menuExportHtml: '匯出為單檔 HTML…',
     menuOpenInDocs: '轉換為 Docs 文件並開啟',
     menuPrint: '列印…',
@@ -2973,6 +3006,83 @@ function openBlankDocsTabForMcp(): number {
   return view.webContents.id
 }
 
+/**
+ * MCP: open a blank sheets tab and return its webContents id, for the
+ * visible-grid bridge. Like the app's own "new spreadsheet", a real blank
+ * .xlsx is created up front (the save pipeline needs an on-disk workbook;
+ * the fallback in-memory demo grid cannot save) — but the AI auto-rename
+ * marking is skipped, the file name is the agent's business.
+ */
+async function openBlankSheetsTabForMcp(): Promise<number> {
+  if (!tabManager) throw new Error('GenOffice is not ready')
+  const filePath = uniquePathIn(defaultSaveDir(), `${tm('untitledSheet')}.xlsx`)
+  writeFileSync(filePath, await blankXlsxBuffer())
+  const tabId = tabManager.openSheetsTab(filePath)
+  const view = tabManager.sheetsTabs().find((t) => t.id === tabId)
+  if (!view) {
+    // the tab never appeared, so nothing will ever consume this file
+    try {
+      rmSync(filePath)
+    } catch (error) {
+      console.warn('[mcp] could not remove the unused blank workbook:', error)
+    }
+    throw new Error('the new spreadsheet tab could not be opened')
+  }
+  const wcId = view.webContents.id
+  mcpBlankSheetPaths.set(wcId, filePath)
+  view.webContents.once('destroyed', () => mcpBlankSheetPaths.delete(wcId))
+  // Same nudge the interactive path uses: the renderer subscribes to the open
+  // action only after Univer mounts, so a single push can land in the void on a
+  // cold start and leave the tab sitting on a blank in-memory workbook.
+  startQueuedWorkbookNudge()
+  recordStarPromptDocOpen()
+  analytics.track('file_new', { kind: 'xlsx' })
+  return view.webContents.id
+}
+
+/** backing files of blank sheets tabs created by the MCP session tools */
+const mcpBlankSheetPaths = new Map<number, string>()
+
+/**
+ * MCP: drop a blank sheets tab whose session never became ready, and delete the
+ * empty workbook created for it. Without this a failed `create_session` leaves
+ * an orphan tab plus an .xlsx in the default save folder that the user never
+ * asked for — and nothing in the MCP surface can clean either one up.
+ */
+function abandonBlankSheetsTabForMcp(wcId: number): void {
+  const manager = tabManager
+  const filePath = mcpBlankSheetPaths.get(wcId)
+  mcpBlankSheetPaths.delete(wcId)
+  if (!manager) return
+  // the grid may already be usable while the MCP bridge is not: keep anything the user typed
+  if (manager.dirtySheetsTabs().some((t) => t.webContents.id === wcId)) return
+  if (!abandonBlankTabForMcp(manager.sheetsTabs(), wcId)) return
+  if (!filePath) return
+  try {
+    if (existsSync(filePath)) rmSync(filePath)
+  } catch (error) {
+    console.warn('[mcp] could not remove the unused blank workbook:', error)
+  }
+}
+
+/**
+ * MCP: close a tab whose session never became ready. Returns false when the
+ * tab could not be closed (it is already gone, or the close failed).
+ */
+function abandonBlankTabForMcp(
+  tabs: Array<{ id: string; webContents: WebContents }>,
+  wcId: number,
+): boolean {
+  const tab = tabs.find((t) => t.webContents.id === wcId)
+  if (!tab || !tabManager) return false
+  try {
+    return tabManager.closeTabWithoutPrompt(tab.id)
+  } catch (error) {
+    console.warn('[mcp] could not close the unused tab:', error)
+    return false
+  }
+}
+
 /** MCP: open a blank slides tab and return its webContents id, for the visible-deck bridge */
 function openBlankSlidesTabForMcp(): number {
   if (!tabManager) throw new Error('GenOffice is not ready')
@@ -3097,7 +3207,8 @@ function registerHomeIpc(): void {
   })
 
   ipcMain.handle(HOME_CHANNELS.openPath, (_event, path: unknown) => {
-    if (typeof path === 'string') openDocumentPath(path)
+    if (typeof path !== 'string' || !path || path.length > 4096) return
+    openDocumentPath(path)
   })
 
   ipcMain.handle(HOME_CHANNELS.browse, async (event) => {
@@ -3351,12 +3462,13 @@ function registerHomeIpc(): void {
   ipcMain.handle(HOME_CHANNELS.getAiPanelPrefs, (): AiPanelPrefs => currentAiPanelPrefs())
   ipcMain.handle('app:get-ai-panel-prefs', (): AiPanelPrefs => currentAiPanelPrefs())
 
-  ipcMain.handle(HOME_CHANNELS.setAiPanelPrefs, (_event, patch: unknown): AiPanelPrefs => {
+  const setAiPanelPrefs = (patch: unknown): AiPanelPrefs => {
     const prev = currentAiPanelPrefs()
     const raw =
       patch !== null && typeof patch === 'object' ? (patch as Record<string, unknown>) : {}
     // unknown/malformed fields fall back to the previous value, not the default
     const next = normalizeAiPanelPrefs({
+      side: raw.side === 'left' || raw.side === 'right' ? raw.side : prev.side,
       fontSize: 'fontSize' in raw ? raw.fontSize : prev.fontSize,
       customFontSize: 'customFontSize' in raw ? raw.customFontSize : prev.customFontSize,
       spellcheck: 'spellcheck' in raw ? raw.spellcheck : prev.spellcheck,
@@ -3364,13 +3476,16 @@ function registerHomeIpc(): void {
     if (sameAiPanelPrefs(next, prev)) return prev
     cachedAiPanelPrefs = next
     writeAppSettings(APP_SETTINGS_PATH(), {
+      aiPanelSide: next.side,
       aiPanelFontSize: next.fontSize,
       aiPanelCustomFontSize: next.customFontSize,
       aiPanelSpellcheck: next.spellcheck,
     })
     for (const wc of webContents.getAllWebContents()) wc.send('app:ai-panel-prefs-changed', next)
     return next
-  })
+  }
+  ipcMain.handle(HOME_CHANNELS.setAiPanelPrefs, (_event, patch) => setAiPanelPrefs(patch))
+  ipcMain.handle('app:set-ai-panel-prefs', (_event, patch) => setAiPanelPrefs(patch))
 
   // effective folder where new/untitled files land; the editor mains resolve
   // the same setting themselves (configuredDefaultSaveDir via docs' defaultSaveDir)
@@ -3619,8 +3734,14 @@ function broadcastChromePressed(exclude?: WebContents): void {
 function registerTabsIpc(): void {
   ipcMain.on(TABS_CHANNELS.chromePressed, (event) => broadcastChromePressed(event.sender))
   ipcMain.handle(TABS_CHANNELS.list, () => tabManager?.list() ?? [])
-  ipcMain.handle(TABS_CHANNELS.activate, (_event, id: string) => tabManager?.activateTab(id))
-  ipcMain.handle(TABS_CHANNELS.close, (_event, id: string) => tabManager?.closeTab(id))
+  ipcMain.handle(TABS_CHANNELS.activate, (_event, id: unknown) => {
+    if (typeof id !== 'string' || !id) return
+    tabManager?.activateTab(id)
+  })
+  ipcMain.handle(TABS_CHANNELS.close, (_event, id: unknown) => {
+    if (typeof id !== 'string' || !id) return
+    tabManager?.closeTab(id)
+  })
   ipcMain.handle(TABS_CHANNELS.reorder, (_event, id: string, toIndex: number) => {
     if (typeof id === 'string' && Number.isInteger(toIndex)) tabManager?.reorderTab(id, toIndex)
   })
@@ -3753,6 +3874,7 @@ function buildHomeMenu(): void {
       submenu: [
         { label: tm('thirdPartyNotices'), click: () => void openThirdPartyNotices() },
         { type: 'separator' },
+        checkUpdatesMenuItem(appMenuLabels(currentLang())),
         aboutMenuItem(appMenuLabels(currentLang())),
       ],
     },
@@ -3835,6 +3957,7 @@ function buildPdfMenu(): void {
       submenu: [
         { label: tm('thirdPartyNotices'), click: () => void openThirdPartyNotices() },
         { type: 'separator' },
+        checkUpdatesMenuItem(appMenuLabels(currentLang())),
         aboutMenuItem(appMenuLabels(currentLang())),
       ],
     },
@@ -3895,6 +4018,13 @@ function buildMarkdownMenu(): void {
           },
         },
         {
+          label: tm('menuExportImages'),
+          click: () => {
+            const tab = tabManager?.activeMarkdownTab()
+            if (tab) sendMarkdownExportRequest(tab.webContents, 'png')
+          },
+        },
+        {
           label: tm('menuOpenInDocs'),
           click: () => {
             const tab = tabManager?.activeMarkdownTab()
@@ -3926,6 +4056,7 @@ function buildMarkdownMenu(): void {
       submenu: [
         { label: tm('thirdPartyNotices'), click: () => void openThirdPartyNotices() },
         { type: 'separator' },
+        checkUpdatesMenuItem(appMenuLabels(currentLang())),
         aboutMenuItem(appMenuLabels(currentLang())),
       ],
     },
@@ -4017,6 +4148,7 @@ function buildHtmlMenu(): void {
       submenu: [
         { label: tm('thirdPartyNotices'), click: () => void openThirdPartyNotices() },
         { type: 'separator' },
+        checkUpdatesMenuItem(appMenuLabels(currentLang())),
         aboutMenuItem(appMenuLabels(currentLang())),
       ],
     },
@@ -4699,17 +4831,61 @@ app.whenReady().then(async () => {
   // Register the docs renderer bridge listeners before the MCP server can take
   // a visible-editing request.
   installDocsBridge()
+  installSheetsBridge()
   // MCP server: localhost-only, docx generation for external agents. Deps are
   // injected so the mcp module never imports this file back.
+  // family controls are referenced twice (their own tools + the open-documents
+  // tool), so create them once here
+  const mcpDocsControl = createDocsControl({
+    openBlankTab: () => openBlankDocsTabForMcp(),
+    authorizeSave: authorizeMcpDocWrite,
+    abandonBlankTab: (wcId) => {
+      if (tabManager) abandonBlankTabForMcp(tabManager.docsTabs(), wcId)
+    },
+  })
+  const mcpSlidesControl = createSlidesControl({
+    openBlankTab: () => openBlankSlidesTabForMcp(),
+    abandonBlankTab: (wcId) => {
+      if (tabManager) abandonBlankTabForMcp(tabManager.slidesTabs(), wcId)
+    },
+  })
+  const mcpSheetsControl = createSheetsControl({
+    openBlankTab: () => openBlankSheetsTabForMcp(),
+    authorizeSave: authorizeMcpSheetWrite,
+    abandonBlankTab: (wcId) => abandonBlankSheetsTabForMcp(wcId),
+  })
   configureMcpRuntime({
     version: app.getVersion(),
     defaultSaveDir: () => defaultSaveDir(),
     openPath: (filePath) => routeDocumentPath(filePath),
-    docsControl: createDocsControl({
-      openBlankTab: () => openBlankDocsTabForMcp(),
-      authorizeSave: authorizeMcpDocWrite,
+    docsControl: mcpDocsControl,
+    slidesControl: mcpSlidesControl,
+    sheetsControl: mcpSheetsControl,
+    // documents the user has open: the tab list plus each family's own bridge,
+    // so an agent reaches a tab nobody but the user opened
+    openDocumentsControl: createOpenDocumentsControl({
+      list: () => {
+        if (!tabManager) throw new Error('the tab manager is not ready')
+        return tabManager.openDocuments()
+      },
+      webContentsFor: (tabId) => tabManager?.webContentsForTab(tabId),
+      closeTab: (tabId) => tabManager?.closeTabWithoutPrompt(tabId) ?? false,
+      defaultSaveDir: () => defaultSaveDir(),
+      docs: mcpDocsControl,
+      sheets: mcpSheetsControl,
+      slides: mcpSlidesControl,
+      slidesDiscard: discardSlidesRecovery,
+      markdown: {
+        read: markdownReadText,
+        save: markdownSaveToPath,
+        discard: markdownDiscardPendingAssets,
+      },
+      html: {
+        read: htmlReadText,
+        save: htmlSaveToPath,
+        discard: htmlDiscardPendingAssets,
+      },
     }),
-    slidesControl: createSlidesControl({ openBlankTab: () => openBlankSlidesTabForMcp() }),
     // the headless create_*/read_* tools delegate to the bundled genoffice CLI
     // (the same engines, no second implementation); it runs on the app's own
     // Node runtime via ELECTRON_RUN_AS_NODE
@@ -4718,6 +4894,19 @@ app.whenReady().then(async () => {
       entry: app.isPackaged
         ? join(process.resourcesPath, 'cli', 'genoffice.cjs')
         : join(APPS_ROOT, '..', 'packages', 'cli', 'dist', 'genoffice.cjs'),
+    }),
+    // lets the content tools take a `document` argument (tab id or path) and edit
+    // a tab the *user* has open, with no create_session involved
+    resolveTarget: createOpenTargetResolver({
+      list: () => {
+        if (!tabManager) throw new Error('the tab manager is not ready')
+        return tabManager.openDocuments()
+      },
+      webContentsFor: (tabId) => tabManager?.webContentsForTab(tabId),
+      // an agent editing a background tab would otherwise work where nobody can
+      // see it: switch to that tab and bring the window forward first
+      activate: (tabId) => tabManager?.activateTab(tabId),
+      revealWindow: revealShellWindow,
     }),
     logFilePath: join(app.getPath('userData'), 'mcp-log.txt'),
   })
@@ -4728,6 +4917,7 @@ app.whenReady().then(async () => {
   // deferred to ready: labels need currentLang(), which reads app.getLocale()
   installBackToHomeItems()
   installDockMenu()
+  setUpdateCheckInvoker(() => void checkForUpdatesNow())
   initAutoUpdater(() => shellWindow, currentUpdateChannel())
 
   if (!pendingLaunchPath || !openDocumentPath(pendingLaunchPath)) tabManager?.openHomeTab()

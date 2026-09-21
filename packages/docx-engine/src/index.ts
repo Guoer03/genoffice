@@ -4,6 +4,7 @@ export { decodeEntities } from './parse-xml-text'
 export { sdtCheckboxGlyphs, sdtCheckboxIsChecked } from './checkbox-control'
 export { parseDocx, styleRunFormat, type ParseExtras, type ParseOptions } from './parse'
 export { DOCX_ZIP_LIMITS } from './zip-load'
+export { LAZY_MEDIA_SCHEME, isLazyMediaPart, lazyMediaUrl, parseLazyMediaUrl } from './lazy-media'
 export { setAltChunkHtmlConverter, type AltChunkHtmlConverter } from './alt-chunk'
 export { tocLevelOf } from './parse-fields'
 export {
@@ -64,6 +65,7 @@ export {
   parseChartPartXml,
   patchChartPartXml,
   lumHex,
+  colLetter,
   CHART_WORKBOOK_REL_TYPE,
   type ChartPatch,
   type ChartSeriesPatch,
@@ -111,6 +113,8 @@ export {
 } from './watermark'
 export {
   mergeStyleXml,
+  mergeDefaultFontsXml,
+  type DefaultFonts,
   pendingHeadingLevel,
   type StyleHeadingInfo,
   type StyleParaProps,
@@ -126,7 +130,13 @@ export {
 export { bibliographyLine, citationText, parseSourcesXml } from './sources'
 export { parseZoteroDocumentDataXml, patchZoteroDocumentDataXml } from './zotero-doc-props'
 export { readThemeColors, readThemeFonts } from './theme'
-export { hashProtectionPassword, verifyProtectionPassword } from './protection'
+export {
+  DEFAULT_SPIN_COUNT,
+  MAX_SPIN_COUNT,
+  hashProtectionPassword,
+  resolveSpinCount,
+  verifyProtectionPassword,
+} from './protection'
 export {
   decodeSymbolChar,
   decodeSymbolText,
@@ -145,3 +155,5 @@ export {
   type ListItemRef,
   type ListMarkerInfo,
 } from './list-markers'
+
+export { previewFontSettings } from './font-settings'

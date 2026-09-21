@@ -64,7 +64,12 @@ import type {
 import { PAGE_MARK, TOTAL_PAGES_MARK } from './types'
 import { patchParagraphTexts } from './text-patch'
 import { balanceFieldChars } from './field-balance'
-import { mergeStyleXml, type StyleUpsert } from './style-upsert'
+import {
+  mergeStyleXml,
+  mergeDefaultFontsXml,
+  type DefaultFonts,
+  type StyleUpsert,
+} from './style-upsert'
 import {
   WATERMARK_NS,
   isPictureWatermark,
@@ -101,6 +106,9 @@ export type SaveBlock = (
     }
   /** a new inline image; bytes become word/media/... + relationship */
   | { kind: 'image'; image: NewImage }
+  /** several anchored pictures sharing one holder paragraph (page-pinned floats
+   *  of a rebuilt page): one block instead of one empty paragraph per picture */
+  | { kind: 'images'; images: NewImage[] }
   /** a new embedded chart; data becomes word/charts/chartN.xml + relationship */
   | { kind: 'chart'; chart: NewChart; extentPx?: { w: number; h: number } }
 ) & {
@@ -173,6 +181,7 @@ export interface SaveOptions {
   }
   /** create/modify styles: surgical upsert of word/styles.xml by styleId (replace when present, else append) */
   styleUpserts?: StyleUpsert[]
+  defaultFonts?: DefaultFonts
   /**
    * Replace whole zip parts by path (e.g. patched chart parts from
    * patchChartPartXml). Only paths that already exist in the package are
@@ -369,6 +378,7 @@ export async function saveDocx(
     options.titlePg === undefined &&
     (options.sectionHf === undefined || options.sectionHf.length === 0) &&
     options.numbering === undefined &&
+    options.defaultFonts === undefined &&
     (options.styleUpserts === undefined || options.styleUpserts.length === 0) &&
     options.evenAndOddHeaders === undefined &&
     options.comments === undefined &&
@@ -449,7 +459,12 @@ export async function saveDocx(
   let imageSeq = nextImageSeq(zip)
   let docPrSeq = imageSeq
   /** Land image bytes as a media part (no relationship); identical bytes share one part. */
-  const landMedia = (image: { base64: string; mime: NewImage['mime'] }): string => {
+  const landMedia = (image: {
+    base64: string
+    mime: NewImage['mime']
+    sourcePart?: string
+  }): string => {
+    if (image.sourcePart) return image.sourcePart
     const contentKey = `${image.mime}:${image.base64}`
     let mediaPath = mediaPathByContent.get(contentKey)
     if (mediaPath === undefined) {
@@ -463,8 +478,14 @@ export async function saveDocx(
   }
   /** Land image bytes as a media part + document relationship; returns the rId.
    *  Identical bytes reuse ONE media part (repeated logos / per-page backgrounds). */
-  const embedImageMedia = (image: { base64: string; mime: NewImage['mime'] }): string => {
-    const contentKey = `${image.mime}:${image.base64}`
+  const embedImageMedia = (image: {
+    base64: string
+    mime: NewImage['mime']
+    sourcePart?: string
+  }): string => {
+    const contentKey = image.sourcePart
+      ? `part:${image.sourcePart}`
+      : `${image.mime}:${image.base64}`
     let rId = mediaRelByContent.get(contentKey)
     if (rId === undefined) {
       const mediaPath = landMedia(image)
@@ -522,6 +543,16 @@ export async function saveDocx(
     return image.wrap
       ? applyImageWrap(xml, image.wrap, image.posOffsetEmu, undefined, image.zOrder)
       : xml
+  }
+  /** the pictures' runs collected into the first picture's holder paragraph */
+  const embedImages = (images: NewImage[]): string => {
+    const paras = images.map(embedImage)
+    if (paras.length <= 1) return paras[0] ?? ''
+    const runOf = (para: string) => para.slice(para.indexOf('<w:r>'), para.lastIndexOf('</w:p>'))
+    const first = paras[0]
+    return (
+      first.slice(0, first.lastIndexOf('</w:p>')) + paras.slice(1).map(runOf).join('') + '</w:p>'
+    )
   }
 
   // ---- new embedded charts: chart part + workbook + relationship + drawing paragraph ----
@@ -859,7 +890,7 @@ export async function saveDocx(
   // ---- styles: surgical upsert of word/styles.xml (create/modify styles) ----
   const stylesPath = 'word/styles.xml'
   let stylesXmlOut: string | null = null
-  if ((options.styleUpserts?.length ?? 0) > 0) {
+  if ((options.styleUpserts?.length ?? 0) > 0 || options.defaultFonts !== undefined) {
     const file = zip.file(stylesPath)
     let xml = file
       ? await file.async('string')
@@ -875,7 +906,7 @@ export async function saveDocx(
         ? xml.replace(existing, () => styleXml)
         : xml.replace('</w:styles>', `${styleXml}</w:styles>`)
     }
-    stylesXmlOut = xml
+    stylesXmlOut = options.defaultFonts ? mergeDefaultFontsXml(xml, options.defaultFonts) : xml
   }
 
   // ---- comments: regenerate word/comments.xml from the full desired list ----
@@ -1030,6 +1061,8 @@ export async function saveDocx(
       if (fb.replaceImage) xml = retargetImageBlip(xml, embedImageMedia(fb.replaceImage))
     } else if (fb.kind === 'chart') {
       xml = await embedChart(fb.chart, fb.extentPx)
+    } else if (fb.kind === 'images') {
+      xml = embedImages(fb.images)
     } else {
       xml = embedImage(fb.image)
     }

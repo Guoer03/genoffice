@@ -7,7 +7,7 @@ vi.mock('../src/renderer/export-render', () => ({ renderSlidesToPngBase64: vi.fn
 vi.mock('../src/renderer/components/toast-bus', () => ({ showToast: vi.fn() }))
 vi.mock('../src/renderer/i18n/locale', () => ({ t: (k: string) => k }))
 
-import { save, saveAs } from '../src/renderer/file-actions'
+import { adoptSavedSlides, save, saveAs } from '../src/renderer/file-actions'
 import type { ActionCtx } from '../src/renderer/action-context'
 
 function ctx(): ActionCtx {
@@ -30,6 +30,66 @@ function ctx(): ActionCtx {
 }
 
 describe('slides save serialization', () => {
+  it('resets state when the saved slide index is no longer valid', () => {
+    const setSlides = vi.fn()
+    const setSelectedIds = vi.fn()
+    const setEnteredGroupId = vi.fn()
+    const setEditing = vi.fn()
+    const setEditingCell = vi.fn()
+    const context = {
+      ...ctx(),
+      slides: [],
+      current: 0,
+      setSlides,
+      setSelectedIds,
+      setEnteredGroupId,
+      setEditing,
+      setEditingCell,
+    } as unknown as ActionCtx
+
+    adoptSavedSlides(context, [])
+
+    expect(setSlides).toHaveBeenCalledWith([])
+    expect(setSelectedIds).toHaveBeenCalledWith([])
+    expect(setEnteredGroupId).toHaveBeenCalledWith(null)
+    expect(setEditing).toHaveBeenCalledWith(null)
+    expect(setEditingCell).toHaveBeenCalledWith(null)
+  })
+
+  it('resets state when the current slide index is out of range', () => {
+    const setSlides = vi.fn()
+    const setSelectedIds = vi.fn()
+    const setEnteredGroupId = vi.fn()
+    const setEditing = vi.fn()
+    const setEditingCell = vi.fn()
+    const context = {
+      ...ctx(),
+      slides: [
+        {
+          widthPx: 960,
+          heightPx: 540,
+          scale: 1,
+          background: { kind: 'solid', color: 'FFFFFF' },
+          nodes: [],
+        } as ActionCtx['slides'][number],
+      ],
+      current: 1,
+      setSlides,
+      setSelectedIds,
+      setEnteredGroupId,
+      setEditing,
+      setEditingCell,
+    } as unknown as ActionCtx
+
+    adoptSavedSlides(context, [])
+
+    expect(setSlides).toHaveBeenCalledWith([])
+    expect(setSelectedIds).toHaveBeenCalledWith([])
+    expect(setEnteredGroupId).toHaveBeenCalledWith(null)
+    expect(setEditing).toHaveBeenCalledWith(null)
+    expect(setEditingCell).toHaveBeenCalledWith(null)
+  })
+
   it('queues concurrent saves so only one IPC write runs at a time', async () => {
     let inFlight = 0
     let maxConcurrent = 0

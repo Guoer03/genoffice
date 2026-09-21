@@ -121,6 +121,8 @@ export const ms = {
   aiSumWebSearchDone: 'Mencari "{query}" ({count} hasil)',
   aiSumImageSearch: 'Carian imej',
   aiSumImageSearchDone: 'Carian imej "{query}" ({count} imej)',
+  aiSumAnalyzeMedia: 'Analisis media',
+  aiSumAnalyzeMediaDone: 'Media dianalisis',
   aiSumInsertImage: 'Sisipkan imej',
   aiSumInsertWebImage: 'Imej web disisipkan',
   aiSumGenerateImage: 'Jana imej',

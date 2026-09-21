@@ -34,6 +34,16 @@ const fillFormStrings = {
   formPlaceStaticHint: 'Click to place; select the result to move or resize it',
   formXfaWarning:
     'This PDF contains XFA. Only AcroForm is supported; saving may not preserve XFA data.',
+  redact: 'Redact area',
+  redactHint: 'Drag to mark content that will be permanently removed',
+  redactClear: 'Clear marks',
+  redactApply: 'Apply redactions',
+  redactConfirm:
+    'Content inside the marked areas will be permanently removed. Continue, then choose a new copy in the system Save As dialog?',
+  redactSaveAsHint:
+    'Redactions were not applied. Click Apply redactions again to choose a new copy; Normal Save never applies these marks.',
+  redactSaveFirst: 'Save other pending changes before applying redactions.',
+  redactStructureBlocked: 'Apply or clear pending redactions before changing page structure.',
 }
 
 const localizedFillFormStrings = {
@@ -363,6 +373,15 @@ export const strings = {
     aiToolRemoveImageBackground: '移除第 {page} 页图片的背景',
     aiToolDeleteImage: '删除第 {page} 页的图片',
     drawInk: '手绘',
+    redact: '涂黑区域',
+    redactHint: '拖动以标记将永久移除的区域',
+    redactClear: '取消标记',
+    redactApply: '应用涂黑',
+    redactConfirm:
+      '区域中的内容将被永久移除。继续后请在系统“另存为”对话框中选择一个新副本。是否继续？',
+    redactSaveAsHint: '涂黑尚未应用。请再次点击“应用涂黑”并选择新副本；普通保存不会应用这些标记。',
+    redactSaveFirst: '请先保存其他待处理的修改，再应用涂黑。',
+    redactStructureBlocked: '请先应用或取消待处理涂黑标记，再更改页面结构。',
     editText: '编辑文字',
     editTextHint: '点击页面文字直接修改',
     textBlockMoveHint: '拖动边框移动整段文字',
@@ -686,6 +705,16 @@ export const strings = {
     aiToolRemoveImageBackground: 'Remove image background on page {page}',
     aiToolDeleteImage: 'Delete image on page {page}',
     drawInk: 'Draw',
+    redact: 'Redact area',
+    redactHint: 'Drag to mark content that will be permanently removed',
+    redactClear: 'Clear marks',
+    redactApply: 'Apply redactions',
+    redactConfirm:
+      'Content inside the marked areas will be permanently removed. Continue, then choose a new copy in the system Save As dialog?',
+    redactSaveAsHint:
+      'Redactions were not applied. Click Apply redactions again to choose a new copy; Normal Save never applies these marks.',
+    redactSaveFirst: 'Save other pending changes before applying redactions.',
+    redactStructureBlocked: 'Apply or clear pending redactions before changing page structure.',
     editText: 'Edit text',
     editTextHint: 'Click text on the page to change it',
     textBlockMoveHint: 'Drag the border to move this text block',

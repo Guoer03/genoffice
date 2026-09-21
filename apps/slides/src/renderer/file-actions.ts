@@ -30,6 +30,15 @@ export async function flushActiveEdit(ctx: ActionCtx): Promise<void> {
  * the render tree, mapping selection/edit state to new ids by per-page node ordinal.
  */
 export function adoptSavedSlides(ctx: ActionCtx, next: RenderSlide[]): void {
+  if (!ctx.slides[ctx.current]) {
+    ctx.setSlides([])
+    ctx.setSelectedIds([])
+    ctx.setEnteredGroupId(null)
+    ctx.setEditing(null)
+    ctx.setEditingCell(null)
+    return
+  }
+
   const remap = (id: string) => {
     const i = ctx.slides[ctx.current]?.nodes.findIndex((n) => n.sourceId === id) ?? -1
     return next[ctx.current]?.nodes[i]?.sourceId ?? null
